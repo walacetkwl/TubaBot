@@ -1,0 +1,6 @@
+js_storage_load
+js_storage_save
+js_storage_erase
+js_log
+js_reboot
+js_display

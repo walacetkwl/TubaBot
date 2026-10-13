@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TubaBot · Simulador</title>
+<style>
+:root{--ink:#e8eefc;--muted:#8fa0c4;--bg:#070d1c;--panel:#0f1830;--line:#22314f;--blue:#3b7bff;--ok:#36d399;--warn:#ffb020}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#14275a,transparent),var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{padding:14px 20px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:19px}header p{margin:0;color:var(--muted);font-size:13px}
+.wrap{display:grid;grid-template-columns:minmax(360px,700px) minmax(320px,1fr);gap:18px;padding:18px;max-width:1500px;margin:0 auto}
+@media (max-width:980px){.wrap{grid-template-columns:1fr}}
+.dev{background:linear-gradient(180deg,#1b2440,#0d1428);border-radius:28px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06);transition:transform .05s}
+.dev.buzz{box-shadow:0 0 0 3px rgba(255,176,32,.6),0 20px 50px rgba(0,0,0,.45)}
+.dev.shake{animation:sh .09s infinite}
+@keyframes sh{0%{transform:translate(0,0)}25%{transform:translate(1.5px,-1px)}50%{transform:translate(-1.5px,1px)}75%{transform:translate(1px,1px)}}
+.head{user-select:none;-webkit-user-select:none;touch-action:none;margin:0 auto 16px;width:72%;height:64px;border-radius:40px 40px 18px 18px;background:linear-gradient(180deg,#2c3a64,#1c2747);border:2px dashed #3d5291;display:flex;align-items:center;justify-content:center;color:#b9c8f0;font-weight:600;cursor:pointer}
+.head.on{background:linear-gradient(180deg,#3b7bff,#2559d6);color:#fff;border-style:solid;border-color:#9dbbff}
+.screen{background:#000;border-radius:14px;padding:12px;box-shadow:inset 0 0 0 2px #26324f}
+canvas#oled{width:100%;aspect-ratio:2/1;image-rendering:pixelated;image-rendering:crisp-edges;display:block;background:#000}
+.leds{display:flex;gap:18px;margin-top:14px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.led{display:inline-flex;align-items:center;gap:7px}.led i{width:12px;height:12px;border-radius:50%;background:#2a3554;box-shadow:inset 0 0 0 1px #3a4870}
+.led.on i{background:var(--warn);box-shadow:0 0 10px var(--warn)}.led.vib.on i{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.holdbar{height:6px;border-radius:6px;background:#1d2948;margin-top:12px;overflow:hidden}.holdbar i{display:block;height:100%;width:0;background:var(--blue)}
+.marks{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
+.state{margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}.state dt{color:var(--muted)}.state dd{margin:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;min-height:640px}
+.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{background:none;border:0;color:var(--muted);padding:12px 14px;font:inherit;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--blue)}
+.pane{display:none;padding:16px;overflow:auto;flex:1}.pane.on{display:block}
+.pane h3{margin:14px 0 8px;font-size:14px;color:#c9d6f7}.pane h3:first-child{margin-top:0}
+.btn{background:#1d2a4b;color:var(--ink);border:1px solid #2f4170;border-radius:10px;padding:8px 12px;font:inherit;cursor:pointer;margin:0 6px 6px 0}
+.btn:hover{border-color:var(--blue)}.btn.pri{background:var(--blue);border-color:var(--blue)}.btn.warn{border-color:#7a4a00;color:#ffd08a}
+.chk{display:flex;align-items:center;gap:8px;margin:6px 0}
+select{background:#0b1226;color:var(--ink);border:1px solid #2f4170;border-radius:8px;padding:6px}
+.note{font-size:12.5px;color:var(--muted);margin:6px 0 10px}
+.log{font:12px/1.5 ui-monospace,Menlo,monospace;background:#060b18;border:1px solid var(--line);border-radius:10px;padding:8px;height:360px;overflow:auto;white-space:pre-wrap}
+iframe{width:100%;height:calc(100vh - 220px);min-height:600px;border:0;border-radius:12px;background:#eef3fb}
+kbd{background:#1d2a4b;border:1px solid #2f4170;border-radius:5px;padding:0 5px;font-size:12px}
+.pill{font-size:12px;padding:2px 8px;border-radius:99px;background:#1d2a4b;color:#c9d6f7}
+details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top:12px}summary{cursor:pointer;color:#ffd08a}
+</style>
+</head>
+<body>
+<header><h1>TubaBot · Simulador local</h1>
+<p>Executa o <b>mesmo núcleo C++</b> do firmware (WebAssembly). Simula lógica, telas e regras — não é emulação elétrica do ESP32.</p>
+<span class="pill" id="buildInfo"></span></header>
+<div class="wrap">
+<div>
+  <div class="dev" id="dev">
+    <div class="head" id="head" tabindex="0" aria-label="Cabeça do TubaBot (sensor de toque)">Cabeça · toque / segure · <kbd>espaço</kbd></div>
+    <div class="screen"><canvas id="oled" width="128" height="64"></canvas></div>
+    <div class="holdbar"><i id="holdbar"></i></div>
+    <div class="marks"><span>0</span><span>1 s carinho / selecionar</span><span>3 s amor</span><span>8 s configurar</span></div>
+    <div class="leds"><span class="led" id="ledB"><i></i>Buzzer ativo (liga/desliga)</span><span class="led vib" id="ledV"><i></i>Motor de vibração</span><span id="modelTag"></span></div>
+    <dl class="state" id="state"></dl>
+  </div>
+</div>
+<div class="panel">
+  <div class="tabs" id="tabs"><button data-p="ctl" class="on">Controle</button><button data-p="time">Tempo</button><button data-p="fail">Falhas</button><button data-p="portal">Portal</button><button data-p="log">Eventos</button></div>
+  <div class="pane on" id="p-ctl">
+    <h3>Modelo físico</h3>
+    <select id="model"><option value="1">TubaBot (buzzer + vibração)</option><option value="0">TubaBot Lite (só visor)</option></select>
+    <button class="btn" id="applyModel">Aplicar e reiniciar</button>
+    <p class="note">No aparelho real o modelo vem da gravação de fábrica; aqui a troca é livre para teste. Cada modelo guarda seus dados separadamente.</p>
+    <h3>Som e vibração (preferências do Tuba)</h3>
+    <label class="chk"><input type="checkbox" id="pSound"> Som</label>
+    <label class="chk"><input type="checkbox" id="pSilent"> Modo silencioso</label>
+    <label class="chk"><input type="checkbox" id="pVib"> Vibração</label>
+    <h3>Áudio do simulador</h3>
+    <label class="chk"><input type="checkbox" id="hearBuzz"> Ouvir o buzzer simulado (tom fixo liga/desliga)</label>
+    <p class="note">O buzzer comprado é ATIVO: só liga e desliga, sem notas. O simulador reproduz isso com um tom fixo — não toca melodias que o aparelho não conseguiria reproduzir.</p>
+    <h3>Gestos de referência</h3>
+    <p class="note">Toque curto = próxima / iniciar · Toque duplo = menu / voltar · Segurar 1 s = carinho / selecionar · 3 s = amor · 8 s e soltar = recuperação da configuração. Nos jogos: toque age na hora; segure 1,5 s para sair.</p>
+    <details><summary>Ferramentas de desenvolvedor</summary>
+      <p class="note">Separadas do uso normal. Desbloqueios aqui usam um perfil de TESTE que não é gravado.</p>
+      <button class="btn warn" id="devUnlock">Desbloquear expressões (perfil de teste)</button>
+      <button class="btn warn" id="devTestOff">Sair do perfil de teste</button><br>
+      <button class="btn" data-g="tap">Injetar toque</button><button class="btn" data-g="double">Injetar duplo</button><button class="btn" data-g="medium">Injetar 1,2 s</button><button class="btn" data-g="long">Injetar 3,5 s</button><button class="btn" data-g="recovery">Injetar 8,5 s</button>
+    </details>
+  </div>
+  <div class="pane" id="p-time">
+    <h3>Relógio virtual</h3>
+    <p class="note">Acelera timers, Pomodoro, lembretes e personalidade. Jogos sempre rodam em 1×.</p>
+    <select id="speed"><option value="1">1× (tempo real)</option><option value="10">10×</option><option value="60">60×</option><option value="300">300×</option></select>
+    <span id="speedNow" class="pill"></span>
+    <h3>Saltos</h3>
+    <button class="btn" data-adv="10000">+10 s</button><button class="btn" data-adv="60000">+1 min</button><button class="btn" data-adv="300000">+5 min</button><button class="btn" data-adv="1500000">+25 min</button>
+    <p class="note">Um salto grande equivale a um quadro muito atrasado: cada conclusão gera um único aviso.</p>
+    <h3>Hora civil</h3>
+    <button class="btn pri" id="sendTime">Enviar hora do Mac</button>
+    <p class="note">Sem RTC com bateria: após "perda de energia" a hora fica não ajustada, como no aparelho.</p>
+  </div>
+  <div class="pane" id="p-fail">
+    <h3>Energia</h3>
+    <button class="btn" id="reboot">Reiniciar (salva antes)</button>
+    <button class="btn warn" id="powerLoss">Perda de energia (sem salvar pendências)</button>
+    <h3>Rede</h3>
+    <label class="chk"><input type="checkbox" id="wifiBroken"> Wi-Fi de casa indisponível</label>
+    <h3>Armazenamento</h3>
+    <button class="btn warn" id="corrupt">Corromper preferências e reiniciar</button>
+    <button class="btn warn" id="wipe">Apagar dados do simulador</button>
+    <h3>Periféricos</h3>
+    <label class="chk"><input type="checkbox" id="oledFail"> Falha do OLED (o núcleo continua; nada é exibido)</label>
+    <label class="chk"><input type="checkbox" id="stuck"> Sensor preso (nível alto contínuo)</label>
+    <h3>Fila de avisos</h3>
+    <button class="btn" id="burst">Criar 3 timers que terminam juntos</button>
+  </div>
+  <div class="pane" id="p-portal">
+    <p class="note">A MESMA página servida pelo ESP32 em 192.168.4.1, falando com o núcleo simulado pelo mesmo contrato de API.</p>
+    <iframe id="portal" title="Portal do TubaBot" src="../web-ui/portal.html?sim=1"></iframe>
+  </div>
+  <div class="pane" id="p-log"><div class="log" id="log"></div></div>
+</div>
+</div>
+<script src="tubabot_core.wasm.js"></script>
+<script src="sim.js"></script>
+</body>
+</html>
