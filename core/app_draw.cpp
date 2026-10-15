@@ -276,6 +276,7 @@ void App::drawToday(ms_t now) {
 void App::drawLauncher(ms_t now) {
   list_.draw(canvas_, items_, itemN_, now, pressedItem_);
   canvas_.textCentered(40.f, "Apps", FONT_S, DIM);
+  drawBackChevron();
 }
 
 void App::drawGamesMenu(ms_t now) {

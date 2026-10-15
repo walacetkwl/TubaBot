@@ -325,7 +325,7 @@ class App {
   int itemN_ = 0;
   int pressedItem_ = -1;
   bool listTouch_ = false;
-  int exprSel_ = 0, infoPage_ = 0, configPage_ = 0, quickDrag_ = -1;
+  int exprSel_ = 0, infoPage_ = 0, configPage_ = 0, quickDrag_ = -1, quickArm_ = -1;
   int confirmAction_ = 0;
   // alertas
   Alert alerts_[kAlertQueue];
@@ -339,6 +339,8 @@ class App {
   ms_t lastMinuteTick_ = 0, danceSince_ = 0, danceCredit_ = 0;
   ms_t nextDrift_ = 0;
   bool lowBatWarned_ = false;
+  ms_t wakeGuard_ = 0;
+  bool suppressSwipe_ = false;
   // respiração / sorteio
   bool breathOn_ = false;
   uint8_t breathMode_ = 0;

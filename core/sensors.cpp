@@ -43,11 +43,10 @@ void MotionSensor::sample(int ax, int ay, int az, ms_t t) {
   } else {
     calmSince_ = 0;
     if (jerk_ > 220) {
-      if (!moveSince_) moveSince_ = t;
-      if (restSince_ && t - restSince_ >= 2000 && t - moveSince_ >= 60 && t >= pickCooldown_) {
-        push(MotionEv::PickUp); pickCooldown_ = t + 5000;
+      if (!moveSince_) { moveSince_ = t; restedMs_ = restSince_ ? t - restSince_ : 0; restSince_ = 0; }
+      if (restedMs_ >= 2000 && t - moveSince_ >= 60 && t >= pickCooldown_) {
+        push(MotionEv::PickUp); pickCooldown_ = t + 5000; restedMs_ = 0;
       }
-      restSince_ = 0;
     }
   }
 
@@ -93,7 +92,7 @@ int SoundSensor::beatPhase(ms_t now) const {
 void SoundSensor::sample(int level, ms_t t) {
   samples_++;
   level = tbClamp(level, 0, 100);
-  if (!init_) { init_ = true; base_ = (float)level; prev_ = level; lastT_ = t; level_ = level; return; }
+  if (!init_) { init_ = true; base_ = floor_ = (float)level; prev_ = level; lastT_ = t; level_ = level; return; }
   ms_t dt = t > lastT_ ? t - lastT_ : 1;
   if (dt > 1000) dt = 1000;
   lastT_ = t;
@@ -102,6 +101,9 @@ void SoundSensor::sample(int level, ms_t t) {
   // linha de base: sobe devagar (1 dB/s), desce rápido
   if ((float)level < base_) base_ += ((float)level - base_) * fclamp((float)dt / 400.f, 0.f, 1.f);
   else base_ += fminf_((float)level - base_, (float)dt / 1000.f);
+  // piso do ambiente (para música): sobe MUITO devagar (≈1 dB/min)
+  if ((float)level < floor_) floor_ += ((float)level - floor_) * fclamp((float)dt / 400.f, 0.f, 1.f);
+  else floor_ += fminf_((float)level - floor_, (float)dt / 60000.f);
 
   // palma: salto grande e curto acima da base
   int over = level - (int)base_;
@@ -144,8 +146,8 @@ void SoundSensor::sample(int level, ms_t t) {
       regular = close * 100 >= ni * 60;
       if (regular) beatMs_ = med;
     }
-    bool want = recent >= 6 && regular && avg >= (int)base_ + 4;
-    bool keep = music_ && recent >= 3 && avg >= (int)base_ + 2;
+    bool want = recent >= 6 && regular && avg >= (int)floor_ + 2;
+    bool keep = music_ && recent >= 3 && avg >= (int)floor_ + 1;
     if (want && !music_) { music_ = true; push(SoundEv::MusicStart); }
     else if (music_ && !want && !keep) { music_ = false; push(SoundEv::MusicStop); }
   }

@@ -80,7 +80,7 @@ class OutputManager {
   void update(ms_t now);
 
   bool motor() const { return vibeOut_; }
-  bool soundActive(ms_t now) const { return soundUntil_ > now; }
+  bool soundActive(ms_t now) const { return soundUntil_ > now || alertUntil_ > now; }
   Pattern current() const { return current_; }
   bool busy(ms_t now) const { return soundActive(now) || vibe_.active(); }
   uint32_t soundStarts() const { return soundStarts_; }   // contadores para testes/diagnóstico

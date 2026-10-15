@@ -109,8 +109,7 @@ void OutputManager::play(Pattern p, ms_t now, uint32_t seed) {
     uint32_t cap = p == Pattern::Alarm ? kMaxAlarmMs : kMaxPatternMs;
     if (dur > cap) dur = cap;
     ms_t until = now + dur;
-    if (alert) alertUntil_ = until;
-    soundUntil_ = tbMax<ms_t>(until, alertUntil_ > now ? alertUntil_ : 0);
+    if (alert) alertUntil_ = until; else soundUntil_ = until;
     soundStarts_++;
     lastSound_ = p;
   }
@@ -127,12 +126,12 @@ void OutputManager::stopAll() {
 void OutputManager::stopAlerts() {
   synth_.stopChannel(1);
   alertUntil_ = 0;
-  if (patternIsAlert(current_)) { vibe_.stop(); vibeOut_ = false; current_ = Pattern::None; soundUntil_ = 0; }
+  if (patternIsAlert(current_)) { vibe_.stop(); vibeOut_ = false; current_ = Pattern::None; }
 }
 
 void OutputManager::update(ms_t now) {
   // ...e também a cada atualização: desligar som/vibração corta a saída em andamento.
-  if (!AlertPolicy::soundAllowed(caps_, prefs_) && soundUntil_) { synth_.stopAll(); soundUntil_ = alertUntil_ = 0; }
+  if (!AlertPolicy::soundAllowed(caps_, prefs_) && (soundUntil_ || alertUntil_)) { synth_.stopAll(); soundUntil_ = alertUntil_ = 0; }
   if (!AlertPolicy::vibeAllowed(caps_, prefs_)) vibe_.stop();
   // o alarme tem teto: depois de 2 min o som para (o aviso visual continua)
   if (alertUntil_ && now >= alertUntil_) { synth_.stopChannel(1); alertUntil_ = 0; }

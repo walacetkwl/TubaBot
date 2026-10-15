@@ -888,7 +888,7 @@ void App::wake(ms_t now) {
   Screen back = returnScreen_;
   screen_ = (back == Screen::ScreenOff || back == Screen::Torch) ? homePage_ : back;
   if (screen_ == Screen::Game && !game_) screen_ = Screen::GamesMenu;
-  screenAt_ = now; forceFrame_ = true;
+  screenAt_ = now; forceFrame_ = true; wakeGuard_ = now + 600;
   canvas_.invalidateAll();
   noteInteraction(now);
   setInputModeFor(screen_);
@@ -938,6 +938,8 @@ void App::handleTouch(const TouchEvent& e, ms_t now) {
   if (e.type == TouchEv::Down) noteInteraction(now);
   if (screen_ == Screen::Ota) return;
   if (screen_ == Screen::ScreenOff) { if (e.type == TouchEv::RecoveryArmed) wake(now); else return; }
+  // logo depois de acordar, toques rápidos (ex.: duplo toque para acordar) não viram ação
+  if (now < wakeGuard_ && (e.type == TouchEv::Tap || e.type == TouchEv::DoubleTap)) return;
   forceFrame_ = true;
   if (e.type == TouchEv::RecoveryArmed) {
     if (screen_ != Screen::RecoveryConfirm) returnScreen_ = screen_ == Screen::Game ? Screen::GamesMenu : screen_;
@@ -966,22 +968,27 @@ void App::handleTouch(const TouchEvent& e, ms_t now) {
   // ── pressionar / arrastar ──
   bool isList = listScreen(screen_);
   if (e.type == TouchEv::Down) {
+    suppressSwipe_ = false;
     pressedHit_ = hitTest(e.x, e.y);
     if (isList && pressedHit_ < 0) { list_.onDown(e.y, now); listTouch_ = true; pressedItem_ = list_.hit(e.x, e.y); }
-    if (screen_ == Screen::Quick && (pressedHit_ == B_Q_BRIGHT || pressedHit_ == B_Q_VOL)) quickDrag_ = pressedHit_;
+    quickArm_ = (screen_ == Screen::Quick && (pressedHit_ == B_Q_BRIGHT || pressedHit_ == B_Q_VOL)) ? pressedHit_ : -1;
   }
-  if ((e.type == TouchEv::Move || e.type == TouchEv::Down) && quickDrag_ >= 0) {
+  // controle deslizante só "pega" com movimento horizontal (deslizar para cima continua fechando o painel)
+  if (e.type == TouchEv::Move && quickArm_ >= 0 && quickDrag_ < 0 && tbAbs(e.x - e.x0) > 12 && tbAbs(e.x - e.x0) > tbAbs(e.y - e.y0)) quickDrag_ = quickArm_;
+  if ((e.type == TouchEv::Move && quickDrag_ >= 0) || (e.type == TouchEv::Tap && quickArm_ >= 0)) {
+    int qd = quickDrag_ >= 0 ? quickDrag_ : quickArm_;
     int pm = tbClamp((e.x - 108) * 1000 / 250, 0, 1000);
-    if (quickDrag_ == B_Q_BRIGHT) set_.brightness = (uint8_t)tbClamp(10 + pm * 245 / 1000, 10, 255);
+    if (qd == B_Q_BRIGHT) set_.brightness = (uint8_t)tbClamp(10 + pm * 245 / 1000, 10, 255);
     else set_.volume = (uint8_t)(pm / 10);
     applyPrefs(now);
+    if (e.type == TouchEv::Tap) { markSettings(now); quickArm_ = -1; return; }
   }
   if (e.type == TouchEv::Move && isList && listTouch_) { list_.onMove(e.y, now); if (list_.dragged()) pressedItem_ = -1; }
   if (e.type == TouchEv::Move && pressedHit_ >= 0 && hitTest(e.x, e.y) != pressedHit_) pressedHit_ = -1;
   if (e.type == TouchEv::Up) {
     if (isList && listTouch_) list_.onUp(e.vy);
     listTouch_ = false;
-    if (quickDrag_ >= 0) { markSettings(now); if (quickDrag_ == B_Q_VOL) out_.play(Pattern::Boop, now); quickDrag_ = -1; return; }
+    if (quickDrag_ >= 0) { suppressSwipe_ = true; markSettings(now); if (quickDrag_ == B_Q_VOL) out_.play(Pattern::Boop, now); quickDrag_ = -1; return; }
     return;
   }
   if (e.type == TouchEv::Down || e.type == TouchEv::Move) {
@@ -1000,6 +1007,7 @@ void App::handleTouch(const TouchEvent& e, ms_t now) {
     }
   }
   // ── deslizes e toques por tela ──
+  if (suppressSwipe_ && (e.type == TouchEv::SwipeLeft || e.type == TouchEv::SwipeRight || e.type == TouchEv::SwipeUp || e.type == TouchEv::SwipeDown)) { suppressSwipe_ = false; return; }
   bool home = homeScreen(screen_);
   if (home && (e.type == TouchEv::SwipeLeft || e.type == TouchEv::SwipeRight)) {
     static const Screen ORDER[3] = {Screen::Face, Screen::Clock, Screen::Today};

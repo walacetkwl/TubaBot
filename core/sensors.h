@@ -47,7 +47,7 @@ class MotionSensor {
   int peakN_ = 0;
   ms_t lastPeak_ = 0, shakeCooldown_ = 0;
   // repouso / pegar
-  ms_t restSince_ = 0, calmSince_ = 0, moveSince_ = 0, pickCooldown_ = 0;
+  ms_t restSince_ = 0, calmSince_ = 0, moveSince_ = 0, pickCooldown_ = 0, restedMs_ = 0;
   // pose
   Pose pose_ = Pose::Upright, candPose_ = Pose::Upright;
   ms_t candSince_ = 0;
@@ -78,7 +78,7 @@ class SoundSensor {
   SoundEv q_[8];
   int qn_ = 0;
   int level_ = 0, prev_ = 0;
-  float base_ = 30.f;
+  float base_ = 30.f, floor_ = 30.f;
   bool init_ = false;
   ms_t lastT_ = 0;
   // palma

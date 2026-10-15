@@ -179,7 +179,8 @@ void Synth::render(int16_t* out, int n) {
     if (mix < -32768) mix = -32768;
     out[i] = (int16_t)mix;
   }
-  busy_ = any;
+  (void)any;
+  busy_ = v_[0].on || v_[1].on;
   rendered_ += (uint32_t)n;
 }
 

@@ -871,7 +871,7 @@ TEST(civil_time_rtc_and_durations) {
 TEST(alarms_fire_once_days_and_no_retroactive) {
   H h; h.skipIntro();
   std::string r;
-  apiCall(*h.app, "POST", "/api/time", "{\"epoch\":1792065600,\"tz\":\"UTC\"}", r, h.t);  // qua 14/10/2026 12:00 UTC
+  apiCall(*h.app, "POST", "/api/time", "{\"epoch\":1791979200,\"tz\":\"UTC\"}", r, h.t);  // qua 14/10/2026 12:00 UTC
   CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"alarms\":[{\"hour\":12,\"minute\":1,\"days\":8,\"enabled\":true,\"label\":\"Remédio\"},"
                                                 "{\"hour\":12,\"minute\":1,\"days\":2,\"enabled\":true}]}", r, h.t), 200);  // bit3 = qua; bit1 = seg
   int mins = 0; CHECK_EQ(apiCall(*h.app, "GET", "/api/status", nullptr, r, h.t), 200);
@@ -884,7 +884,7 @@ TEST(alarms_fire_once_days_and_no_retroactive) {
   CHECK_EQ(h.app->alertCount(), 0);
   CHECK_EQ(h.app->settings().alarms[0].enabled, 1);  // recorrente continua ligado
   // ajustar a hora para depois do alarme não dispara retroativamente
-  apiCall(*h.app, "POST", "/api/time", "{\"epoch\":1792152060}", r, h.t);  // qui 12:01
+  apiCall(*h.app, "POST", "/api/time", "{\"epoch\":1792065660}", r, h.t);  // qui 12:01
   h.run(2000);
   CHECK_EQ(h.app->alertCount(), 0);
   (void)mins;
