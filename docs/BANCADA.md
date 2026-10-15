@@ -1,86 +1,76 @@
-# Roteiro de bancada — TubaBot v2
+# Roteiro de bancada — TubaBot v3 (ES3C28P)
 
-Faça com a placa **fora do corpo**, sobre a mesa, ligada ao Mac pelo USB-C. Leva uns 20 minutos. Anote o resultado de cada passo; os itens marcados ⚠ são os que o software não pôde confirmar sem a peça.
+Faça com a placa **fora do corpo**, ligada ao computador pelo USB-C. Leva uns 15 minutos. Os itens marcados ⚠ são os que o software não pôde confirmar sem a placa.
 
 ## 0. Gravar
 
-Escolha um caminho:
+- **Navegador (Chrome/Edge):** <https://espressif.github.io/esptool-js/> → *Connect* → arquivos `firmware/dist/tubabot-v3.0.0-completo.bin` em **0x0** e o perfil da unidade (ex.: `firmware/fabrica/fabrica-pro-vermelho.bin`) em **0xFEF000** → *Program*.
+- **PlatformIO:** `pio run -e tubabot -t upload` e depois `python3 tools/fabrica.py --modelo pro --cor vermelho --gravar`.
 
-- **Pelo navegador (sem instalar nada)** — Chrome/Edge: abra <https://espressif.github.io/esptool-js/>, *Connect*, escolha a porta da placa, endereço **0x0**, arquivo `firmware/dist/tubabot-v2.0.0-completo.bin` (ou `tubabot_vibra-…` se ligou o motor), *Program*.
-- **Pelo PlatformIO**: `pio run -e tubabot -t upload` (veja `README_MAC.md`).
+Porta não aparece? Segure **BOOT**, toque **RESET**, solte BOOT e tente de novo.
 
-Se a porta não aparecer: segure **BOOT**, toque **RESET**/plugue o USB, solte BOOT, e tente de novo.
+Abra o monitor serial (115200) e digite `ajuda`.
 
-Abra o monitor serial (115200; no navegador, a própria esptool-js tem *Console*). Digite `ajuda`.
-
-## 1. Barramento e periféricos
+## 1. Barramento e perfil
 
 | Passo | Esperado | Resultado |
 |---|---|---|
-| `i2c` | 0x18, 0x20, 0x34, 0x40, 0x51, 0x5A, 0x6B; linha final com tudo "ok" | |
-| A tela acende com a abertura (mar, nome, olhos) e depois o QR do primeiro uso | imagem nítida, cores corretas, sem faixa deslocada | |
-| `tela-teste` | padrão de teste por alguns segundos; volta sozinho | |
+| `i2c` | 0x18 (ES8311) e 0x38 (FT6336G); tela/toque/alto-falante/microfone "ok" | |
+| `fabrica` | `TubaBot Pro | cor Vermelho | expressões Vermelho | tema escuro` (o que você gravou) | |
+| A tela acende com a abertura (mar, nome, olhos) e depois o QR Code | imagem **em paisagem**, nítida, cores certas | |
 
-Se as cores saírem trocadas (azul↔vermelho) ou a imagem deslocada alguns pixels, anote e me avise: é ajuste de 1 linha no adaptador da tela.
-
-## 2. Toque ⚠
+## 2. Tela ⚠
 
 | Passo | Esperado | Resultado |
 |---|---|---|
-| Encoste no canto **superior esquerdo** e digite `toque` | `TOCANDO em x≈0..60 y≈0..60` | |
-| Canto inferior direito | x≈400..466, y≈400..466 | |
-| Deslize da direita para a esquerda no rosto | abre o próximo cartão (relógio/hoje) | |
-| Toque longo no centro | abre os apps | |
-| Faça carinho (vai-e-vem) | rosto fica feliz, coraçãozinho | |
+| `tela-teste` | ponto **vermelho** no canto superior **esquerdo**; barras branco→azul da esquerda para a direita | |
+| Imagem de cabeça para baixo? | Sistema → Girar 180° (ou compile com `-DTB_LCD_ROTATION=3`) | |
+| Cores trocadas (vermelho↔azul) ou negativas? | me mande uma foto: é ajuste de 1 linha (`TB_LCD_IPS` / ordem BGR) | |
 
-Se x estiver invertido: compile com `-DTB_TOUCH_MIRROR_X=0` (o mesmo para Y; se x e y estiverem trocados, `-DTB_TOUCH_SWAP_XY=1`). Fica em `firmware/include/board_profile.h`.
-
-## 3. Movimento ⚠
+## 3. Toque ⚠
 
 | Passo | Esperado | Resultado |
 |---|---|---|
-| Placa em pé (como ficará no corpo), `imu` | y ≈ +1000, x e z perto de 0 | |
-| Deitada, tela para cima | z ≈ −1000 | |
-| Incline para a esquerda/direita | os olhos acompanham (opção do portal, ligada por padrão) | |
-| Chacoalhe | expressão tonta | |
-| Vire com a tela para baixo | a tela apaga; com alarme tocando, adia (opção do portal) | |
-| App **Nível** | bolha centralizada na mesa | |
+| Encoste no canto superior esquerdo e digite `toque` | `tela x≈0..30 y≈0..30` | |
+| Canto inferior direito | `x≈290..319 y≈210..239` | |
+| Toque no rosto | reage e aparecem os 3 controles à direita, que somem em ~4 s | |
+| Deslize para cima | abre o menu 3×3 | |
+| Acaricie (vai-e-vem devagar) | carinho | |
 
-Se os eixos não baterem, ajuste `TB_IMU_MAP` (ex.: trocar sinais). Me mande a saída de `imu` nas posições acima que eu calculo o mapeamento.
+Se x/y saírem trocados ou espelhados, ajuste `TB_TOUCH_MAP` em `board_profile.h` (a saída do `toque` mostra também as coordenadas cruas — me mande os 2 cantos que eu calculo).
 
 ## 4. Som ⚠
 
 | Passo | Esperado | Resultado |
 |---|---|---|
-| Plugue o alto-falante; `som` | toca o som de abertura; volume confortável | |
-| Ajustes → Volume no mínimo e no máximo | diferença clara; sem chiado/distorção forte | |
-| `som` em silêncio | nível baixo (≈ 10–35) | |
-| `som` batendo palmas perto | nível alto (≈ 60+); palmas no rosto fazem o TubaBot reagir | |
-| Toque uma música perto por 10 s | o TubaBot "dança" (expressão Groovy) | |
+| Plugue o alto-falante; `som` | toca o som de abertura | |
+| Sem som nenhum? | compile com `-DTB_PA_ACTIVE_LOW=0` (o amplificador pode ser ativo em alto) | |
+| Menu → Volume no mínimo e no máximo | diferença clara, sem distorção forte | |
+| `som` em silêncio / batendo palmas | nível baixo (≈10–35) / alto (≈60+); palmas assustam o Tuba | |
+| Música perto por 10 s | o Tuba dança | |
 
-## 5. Energia e relógio
-
-| Passo | Esperado | Resultado |
-|---|---|---|
-| **Antes de plugar a bateria**: multímetro no plugue, vermelho no + | tensão positiva 3,6–4,2 V | |
-| Plugue a bateria com USB ligado | ícone de raio; animação de carga | |
-| Desligue o USB | continua ligado; `status` mostra mV e % | |
-| PWR curto | dorme (tela apaga); PWR de novo acorda | |
-| Ajuste a hora (portal ou Wi-Fi), desligue tudo 1 min, ligue | hora mantida pelo RTC | |
-
-## 6. Rede, portal e OTA
+## 5. Energia (só Pro)
 
 | Passo | Esperado | Resultado |
 |---|---|---|
-| Leia o QR da tela com o celular | conecta em `TubaBot-XXXX` e abre `http://192.168.4.1` | |
-| Configure nome, Wi-Fi de casa, cidade | aceita; o TubaBot entra na rede de casa e mostra o clima | |
-| Portal → espelho da tela | imagem atualiza | |
-| Portal → Atualizar firmware com `tubabot-v2.0.0-app-ota.bin` | grava, reinicia, mantém preferências | |
-| `wifi-esquecer` | apaga só a rede; apelido e recordes ficam | |
-| BOOT por 3 s | reabre a rede de configuração | |
+| **Antes de plugar**: multímetro no plugue da bateria | 3,6–4,2 V, vermelho no `+` da placa | |
+| Bateria plugada, USB desligado | continua ligado; Sobre → Sensores mostra mV e % coerentes com o multímetro | |
+| Lite: Sobre → Sensores | "bateria: não se aplica (Lite)"; Aparência → Informações na tela **sem** "Mostrar bateria" | |
+
+## 6. Rede, portal, hora e OTA
+
+| Passo | Esperado | Resultado |
+|---|---|---|
+| QR Code com o celular | entra em `TubaBot-XXXX` e abre `http://192.168.4.1` | |
+| Configure nome, Wi-Fi de casa, cidade | entra na rede de casa; **a hora aparece sozinha** (NTP); clima carrega | |
+| Desligue e ligue | a hora volta pela rede em alguns segundos (a placa não tem RTC) | |
+| Portal → Aparência → Tema claro / cor | a tela muda na hora | |
+| Portal → Sistema → Atualizar firmware com `tubabot-v3.0.0-app-ota.bin` | grava, reinicia, mantém preferências **e o perfil de fábrica** | |
+| BOOT 3 s | reabre a rede de configuração | |
+| Sistema → Restaurar padrão de fábrica | volta ao primeiro uso com tema e cor **da unidade** | |
 
 ## 7. Montado no corpo
 
-Repita rapidamente os passos 2 (toque nas bordas da moldura), 3 (`imu` em pé) e 4 (volume dentro do corpo). Se a tela ficou de cabeça para baixo: Ajustes → Girar 180°.
+Repita rapidamente 2 (orientação), 3 (toque nas bordas) e 4 (volume dentro do corpo).
 
-Mande para mim a tabela preenchida e a saída de `i2c`, `toque`, `imu` e `status`.
+Mande para mim a tabela preenchida e a saída de `i2c`, `fabrica`, `toque` (dois cantos) e `status`.

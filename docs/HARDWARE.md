@@ -1,82 +1,66 @@
-# Hardware do TubaBot v2 — placa, corpo, ligações e montagem
+# Hardware do TubaBot v3 — ES3C28P
 
-O TubaBot v2 troca o conjunto da v1 (ESP32-C3 + OLED 0,96" + TTP223 + buzzer) por **uma única placa pronta**, a mesma usada pelo corpo de referência (Neo Deskimon, da Creative Chance):
+O TubaBot definitivo usa **uma única placa pronta**, a **ES3C28P** (LCDWIKI / QDtech): ESP32-S3 + tela IPS de 2,8" com toque capacitivo, áudio e carregador de bateria. Não usamos mais OLED 0,96", ESP32-C3 separado, TTP223, buzzer nem motor de vibração — **toda a interação é pela tela de toque**.
 
-**Waveshare ESP32-S3-Touch-AMOLED-1.75** — SKU 31261 (sem GPS) · página oficial: <https://www.waveshare.com/esp32-s3-touch-amoled-1.75.htm>
+> Compre a **ES3C28P** (o "C" é de *capacitive*). A **ES3N28P** é a mesma placa **sem toque**. A "ESP32-S3-Touch-LCD-2.8" da Waveshare é outra placa, com outros pinos.
 
-> Atenção na compra: a Waveshare vende três versões desta placa — **31261** (padrão, a que o corpo Neo usa), **31262** ("-B", com case próprio) e **31264** ("-G", com GPS). Existe ainda a **1.75C**, um modelo diferente com caixa de alumínio. O firmware serve nas versões 31261, 31262 e 31264 (mesmos periféricos; a 1.75C não foi verificada), mas **compre a 31261 "pelada"** para caber no corpo. Confira a foto do anúncio: tela redonda com moldura preta, placa atrás com USB-C, dois botões laterais (BOOT e PWR), slot microSD e conectores MX1.25 para bateria e alto-falante.
+Lista de compras com links: [`lista_de_materiais.xlsx`](lista_de_materiais.xlsx).
 
-A lista de compras completa, com links do Mercado Livre e da Shopee, está em [`lista_de_materiais.xlsx`](lista_de_materiais.xlsx).
+## 1. O que vem na placa
 
-## 1. O que vem na placa (e o que o TubaBot usa)
-
-| Bloco | Componente | Endereço / pinos | Uso no TubaBot v2 |
+| Bloco | Componente | Pinos (GPIO) | Uso no TubaBot |
 |---|---|---|---|
-| Processador | ESP32-S3R8, 240 MHz, 2 núcleos, **8 MB PSRAM** octal, **16 MB flash** | — | tudo; framebuffer 466×466 na PSRAM |
-| Tela | AMOLED 1,75" **466×466**, controlador **CO5300** (QSPI) | CS 12, SCLK 38, D0–D3 4/5/6/7, RST 39, TE 13 | rosto colorido, relógio, apps |
-| Toque | **CST9217** capacitivo (substitui o TTP223 da cabeça) | I²C 0x5A, INT 11, RST 40 | todos os gestos: toque, duplo, longo, deslizar, carinho |
-| Movimento | **QMI8658** acelerômetro + giroscópio | I²C 0x6B, INT2 21 | chacoalhar, pegar no colo, virar de cara, nível, olhar inclinado |
-| Energia | **AXP2101** PMU + carregador de LiPo | I²C 0x34 | % da bateria, carregando, USB presente |
-| Relógio | **PCF85063** RTC | I²C 0x51 | hora mantida sem Wi-Fi (com bateria) |
-| Alto-falante | **ES8311** codec + amplificador **NS4150B** | I²C 0x18, PA GPIO46, I²S MCLK 42 BCLK 9 WS 45 DOUT 8 | sons sintetizados (16 kHz) |
-| Microfones | **ES7210** ADC, 2 microfones | I²C 0x40, I²S DIN 10 | nível de som: palmas, barulho, música (sem gravar voz) |
-| Expansor | **TCA9554** | I²C 0x20 (P4 = botão PWR) | botão PWR |
-| Botões | BOOT (GPIO0) e PWR | — | BOOT curto = acordar/voltar; BOOT 3 s = rede de configuração; PWR = dormir/acordar |
-| Barramento | I²C SDA **15**, SCL **14**, 400 kHz | — | compartilhado por todos acima |
+| Processador | ESP32-S3R8, 240 MHz, 8 MB PSRAM, 16 MB flash | — | tudo |
+| Tela | IPS 2,8" 240×320, **ILI9341V** (SPI) | CS 10, DC 46, SCK 12, MOSI 11, MISO 13, RST = reset da placa, luz de fundo 45 (PWM) | **usada em paisagem 320×240** (controlador girado 90°) |
+| Toque | **FT6336G** capacitivo, I²C 0x38 | SDA 16, SCL 15, RST 18, INT 17 | todos os gestos |
+| Áudio | **ES8311** (I²C 0x18) + amplificador FM8002E + microfone | I²S MCLK 4, BCLK 5, LRCK 7, saída 6, entrada 8; habilita amplificador 1 (ativo em baixo) | sons e nível do microfone |
+| Bateria | conector BAT + carregador **TP4054** (~0,5 A) | tensão no ADC 9 (divisor 1:2) | só no **Pro** |
+| LED RGB | WS2812 | 42 | mantido apagado |
+| microSD | slot (SDIO) | 38/40/39/41/48/47 | não usado |
+| Botões | BOOT (GPIO0) e RESET | — | BOOT: curto = apagar/acender ou voltar ao rosto; 3 s = configuração |
+| Expansão | conector com IO2/3/14/21 + I²C | — | livre |
 
-Todos os pinos e polaridades ficam em **um só lugar**: [`firmware/include/board_profile.h`](../firmware/include/board_profile.h). Fonte: o `HARDWARE_REFERENCE.md` e os exemplos do repositório oficial `waveshareteam/ESP32-S3-Touch-AMOLED-1.75`.
+Pinos e polaridades ficam num só lugar: [`firmware/include/board_profile.h`](../firmware/include/board_profile.h). Fontes conferidas entre si: LCDWIKI, BSP `ngttai/esp32_s3_es3c28p` e o perfil ES3C28P do `bmorcelli/Launcher`.
 
-## 2. O que você conecta
+## 2. Lite × Pro
 
-| Item | Conector na placa | Cuidados |
+| | TubaBot Lite | TubaBot Pro |
 |---|---|---|
-| Bateria LiPo 3,7 V **803040 1000 mAh** (cabe no corpo Neo) | **MX1.25 2 pinos** "BAT" | **Confira a polaridade antes de plugar.** Baterias de anúncio vêm com fios em ordem diferente; o vermelho tem de ir no `+` serigrafado na placa. Se estiver invertido, troque os pinos do plugue com uma agulha (levante a trava). Exija bateria **com circuito de proteção (PCM)**. Uma bateria até ~1200 mAh com até 8 × 30 × 40 mm entra. |
-| Alto-falante **8 Ω, 1–2 W**, ~28 mm (ou cápsula retangular 2030/2835) | **MX1.25 2 pinos** "SPK" | Sem polaridade crítica. Se vier com outro plugue (PH2.0, JST), corte e solde um rabicho MX1.25. |
-| Motor de vibração MV50 (opcional, **da v1**) | Barra de expansão: **GPIO16**, 3V3, GND | Só no firmware `tubabot_vibra`. O MV50 tem transistor próprio; ligue IN→GPIO16, VCC→3V3, GND→GND. |
-| Cabo USB-C de **dados** (o Ugreen da v1 serve) | USB-C | Alimenta, carrega a bateria e grava o firmware. |
+| Placa, tela, toque, alto-falante, microfone, Wi-Fi | sim | sim |
+| Bateria LiPo 3,7 V (1000–1500 mAh) | **não** | **sim** (conector BAT) |
+| Alimentação | USB-C | USB-C + bateria |
+| Firmware | **o mesmo** | **o mesmo** |
+| Como a unidade "sabe" | perfil de fábrica `modelo=lite` | perfil de fábrica `modelo=pro` |
 
-> **MX1.25 ≠ PH2.0 ≠ JST-SH 1.0.** São parecidos e não encaixam entre si. O kit de rabichos MX1.25 2 pinos da lista resolve qualquer diferença.
+Veja [`FABRICA.md`](FABRICA.md).
 
-Não é preciso soldar nada na placa para o uso básico. O ferro de solda da v1 só entra se precisar adaptar plugue da bateria/alto-falante ou ligar o motor.
+## 3. O que você conecta
 
-## 3. Corpo (Neo Deskimon)
+| Item | Conector | Cuidados |
+|---|---|---|
+| Alto-falante 8 Ω 1,5 W (ou 4 Ω 2 W) | SPEAKER (2 vias) | confira se é MX1.25 ou PH2.0 na sua placa |
+| Bateria LiPo 3,7 V com proteção (só Pro) | BAT (2 vias) | **meça a polaridade com o multímetro antes de plugar**; o `+` está serigrafado na placa |
+| Cabo USB-C de dados | USB-C | gravação, alimentação e carga |
 
-- Arquivos 3D do corpo **Neo** (capuz com fones de ouvido) vendidos pela Creative Chance no Thangs (~US$ 8). Imprimir em **PLA** (0,2 mm, 15–20 % de preenchimento, suporte só onde o fatiador indicar — normalmente na abertura da tela e nos fones).
-- Sem impressora: serviços de impressão 3D sob encomenda no Mercado Livre/Shopee (envie o STL; peça PLA, a cor que quiser).
-- O corpo foi feito para a placa 1.75 com bateria 803040 e alto-falante pequeno atrás da tela. Os ímãs de neodímio 8×2 mm da v1 podem fixar a tampa traseira (cole com cianoacrilato nos furos, se o modelo prever) — opcional.
+## 4. Montagem no corpo
 
-### Montagem sugerida
+1. **Antes de montar**, grave firmware + perfil de fábrica ([`FABRICA.md`](FABRICA.md)) e rode o roteiro de [`BANCADA.md`](BANCADA.md) com a placa solta.
+2. Prenda a placa pelos 4 furos (parafusos M2/M2,5), tela para fora, **na horizontal**. Se a imagem ficar de cabeça para baixo, use Sistema → **Girar 180°** (gira imagem e toque, sem recompilar).
+3. Alto-falante na cavidade com furos do corpo; Pro: bateria com fita dupla-face fina, longe de parafusos e cantos vivos.
+4. Deixe o botão BOOT acessível por um furo (é a recuperação sem toque).
 
-1. **Antes de montar**, grave o firmware e rode o roteiro de [`BANCADA.md`](BANCADA.md) com a placa solta (tela, toque, sensores, som, bateria).
-2. Plugue o alto-falante (SPK) e a bateria (BAT, **polaridade conferida**). Prenda a bateria com fita dupla-face fina no fundo do corpo, longe de parafusos e cantos vivos.
-3. Encaixe a placa pela frente, tela para fora, USB-C alinhado com a abertura do corpo e os dois botões alinhados aos furos laterais.
-4. Passe os fios sem esmagar contra a placa. O alto-falante vai na cavidade com furos (os "fones").
-5. Feche a tampa traseira. Ligue com PWR (ou plugando o USB-C).
-6. Se o corpo deixar a tela de cabeça para baixo, ative **Ajustes → Girar 180°** (gira imagem e toque juntos).
+## 5. Energia (Pro)
 
-## 4. Peças da v1 que continuam úteis
-
-| Peça da v1 | Na v2 |
-|---|---|
-| Cabo Ugreen USB-C | sim — alimentação/gravação |
-| MV50 + jumpers fêmea-fêmea | sim — vibração opcional no GPIO16 |
-| Multímetro | sim — conferir polaridade da bateria |
-| Ferro de solda + estanho | só se precisar adaptar plugues |
-| Ímãs 8×2 mm | opcional, fecho da tampa |
-| ESP32-C3, OLED, TTP223, buzzer ativo, barra de pinos | não são usados (a v1 continua funcionando com eles) |
-
-## 5. Energia
-
-- Consumo estimado (tela AMOLED tem consumo proporcional ao brilho e aos pixels acesos; o rosto é majoritariamente preto): ~90–150 mA ativo com Wi-Fi, menos com brilho baixo; tela apagada no modo dormir.
-- 1000 mAh ≈ 6–10 h de uso contínuo, mais com "Brilho reduzido à noite" e virando o TubaBot de tela para baixo (apaga a tela). **Valores estimados — medir na bancada** (o `status` mostra mV e % lidos do AXP2101).
-- O carregamento é feito pelo AXP2101 quando o USB-C está ligado; o TubaBot mostra o raio na bateria e uma animação ao plugar.
+- A placa mede a **tensão** da bateria (ADC); a porcentagem vem de uma curva de LiPo. A placa **não informa se está carregando**, então o TubaBot não mostra o raio de carga.
+- Consumo típico da placa (LCDWIKI): ~140 mA só com a tela; luz de fundo ~79 mA no máximo. Com 1000 mAh, espere **algumas horas** de uso contínuo; brilho mais baixo e "Apagar a tela" aumentam bastante. **Medir na bancada.**
 
 ## 6. Pontos a confirmar na bancada
 
 | Item | Por quê | Como conferir | Onde ajustar |
 |---|---|---|---|
-| Orientação do toque | o CST9217 pode vir espelhado em relação à imagem | comando `toque`: canto superior esquerdo ≈ (0,0) | `TB_TOUCH_MIRROR_X/Y`, `TB_TOUCH_SWAP_XY` |
-| Eixos do IMU | o mapeamento foi deduzido do esquema, não medido | comando `imu`: em pé y≈+1000; deitado com a tela para cima z≈−1000 | `TB_IMU_MAP` |
-| Volume do alto-falante | depende do alto-falante comprado | Ajustes → Volume; comando `som` | ganho do ES8311 em `hw.cpp` |
-| Sensibilidade dos microfones | idem | comando `som` com palmas | ganho do ES7210 em `hw.cpp` (30 dB) |
-| Polaridade da bateria | depende do anúncio | multímetro antes de plugar | — |
+| Orientação da imagem | a rotação 1 do ILI9341 deve dar paisagem com o "topo" no lugar certo | comando `tela-teste`: ponto vermelho no canto superior **esquerdo** | `TB_LCD_ROTATION` (1 ou 3) ou Girar 180° |
+| Mapa do toque | as coordenadas cruas do FT6336G são do painel em retrato | comando `toque`: canto superior esquerdo ≈ (0,0), inferior direito ≈ (319,239) | `TB_TOUCH_MAP` |
+| Cores | painel IPS precisa de inversão; ordem BGR | `tela-teste`: barras branco, amarelo, ciano, verde, magenta, vermelho, azul | `TB_LCD_IPS` |
+| Amplificador | a LCDWIKI diz "nível baixo liga"; um BSP diz o contrário | comando `som` | `TB_PA_ACTIVE_LOW` |
+| Microfone | ganho depende da montagem | `som` com palmas | ganho do ES8311 em `hw.cpp` |
+| Bateria (Pro) | divisor 1:2 e curva | comparar Sobre → Sensores com o multímetro | `TB_BAT_DIV` |

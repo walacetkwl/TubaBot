@@ -1111,7 +1111,8 @@ TEST(api_status_frame_options_collection) {
   CHECK_EQ(apiCall(*h.app, "GET", "/api/frame", nullptr, r, h.t), 200);
   CHECK(r.find("\"w\":160") != std::string::npos);
   size_t a = r.find("\"data\":\"") + 8, b = r.find('"', a);
-  CHECK_EQ(b - a, (size_t)((320 + 2) / 3 * 4 * 120));
+  CHECK_EQ(b - a, (size_t)(160 * 120 * 2 / 3 * 4));  // base64 contínuo (sem "=" intermediário)
+  CHECK(r.substr(a, b - a).find('=') == std::string::npos);
   CHECK_EQ(apiCall(*h.app, "GET", "/api/options", nullptr, r, h.t), 200);
   CHECK(r.find("\"sao_paulo\"") != std::string::npos && r.find("\"#3EE6FF\"") != std::string::npos);
   CHECK_EQ(apiCall(*h.app, "GET", "/api/collection", nullptr, r, h.t), 200);

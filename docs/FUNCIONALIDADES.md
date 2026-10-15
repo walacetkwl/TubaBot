@@ -1,145 +1,124 @@
-# TubaBot v2 — funcionalidades, gestos, regras e políticas
+# TubaBot v3 — funcionalidades, gestos, regras e políticas
 
-Tudo abaixo está implementado em `core/` e roda igual no firmware (ESP32-S3), no simulador (WebAssembly) e nos testes nativos. O que mudou em relação à v1 está marcado com **(novo)**.
+Tudo abaixo está implementado em `core/` e roda igual no firmware (ES3C28P / ESP32-S3), no simulador (WebAssembly) e nos testes nativos. O que é novo na v3 está marcado com **(v3)**.
 
-## 1. A nova "cara": tela redonda AMOLED 466×466
+## 1. Tela: 2,8" IPS em paisagem, 320×240 **(v3)**
 
-- Fundo preto de verdade (pixel do AMOLED apagado): contraste máximo e economia de energia.
-- Motor gráfico próprio com **antialiasing** em tudo (formas por campo de distância), fontes Nunito em 6 tamanhos com acentos pt-BR, 45 ícones vetoriais e QR Code.
-- Só a área que mudou é enviada ao painel (retângulo com coordenadas pares, exigência do CO5300); telas paradas não gastam barramento.
-- **Anti-marcação (burn-in):** o rosto e os mostradores do relógio "passeiam" alguns pixels a cada poucos minutos; a tela apaga no descanso; brilho reduzido à noite.
-- Tema: cada app tem sua cor; a cor dos olhos é escolhida pelo usuário (8 opções: ciano, menta, lilás, rosa, âmbar, azul, coral, branco).
+- A placa ES3C28P tem um painel 240×320; o firmware gira o controlador 90° e **toda a interface é desenhada em 320×240 (paisagem)**: rosto, menus, jogos, Pomodoro, configurações e simulador.
+- Motor gráfico próprio com **antialiasing** em tudo (formas por campo de distância), fontes Nunito em 6 tamanhos (14 a 92 px) com acentos pt-BR, ícones vetoriais e QR Code.
+- Só a área que mudou é enviada ao display (SPI a 40 MHz); o rosto anima a ~30 quadros/s.
+- "Girar 180°" troca a rotação do controlador (o toque gira junto) — para montar o corpo com o USB do outro lado.
 
-## 2. Toque na tela (substitui o TTP223 da cabeça)
+## 2. Rosto em tela cheia **(v3)**
 
-Classificação **exclusiva** ao soltar (uma interação = no máximo um destes): toque, duplo toque, toque longo solto, deslize (4 direções), carinho, recuperação. Durante a pressão há retorno imediato: `Down`/`Move` (arrastar listas, controles deslizantes, olhos seguindo o dedo), `LongPress` (600 ms) e `PetStroke` (a cada 140 px de trajeto lento). Falhas curtas do controlador (< 40 ms) não dividem um toque.
+- No estado normal **100% da tela é do rosto**: sem barra, sem ícones, sem informações.
+- Os **controles aparecem quando você toca** no rosto — uma coluna discreta à direita com Pomodoro, **Menu** e Jogos — e **somem sozinhos** após ~4 s. Logo depois de ligar eles aparecem uma vez, para mostrar que existem.
+- **Informações opcionais sobre o rosto** (Aparência → Informações na tela), cada uma com seu liga/desliga e **todas desligadas de fábrica**: hora (centro do topo), clima (canto esquerdo), bateria (canto direito, **só no Pro** — no Lite a opção nem aparece). São pequenas e em cor suave para não estragar o rosto.
+- Enquanto um Pomodoro/timer corre, uma linha fina de progresso aparece na borda inferior.
+- Sem interação, **qualquer tela volta ao rosto**: menus em 20 s, apps em 45 s (timers e Pomodoro continuam). Exceções: jogo em andamento, respiração em andamento, cronômetro rodando, tela de configuração por QR (3 min).
+
+## 3. Tema claro e escuro **(v3)**
+
+- **Escuro** (fundo preto) é o padrão de fábrica; **Claro** (fundo branco). Fica salvo.
+- Não é inversão de cores: cada tema tem sua própria paleta de interface (superfícies, textos, linhas) e as **expressões são adaptadas** — no claro o halo luminoso dos olhos é desligado (no branco vira mancha) e os brilhos/estrelinhas usam um tom da cor do olho em vez de branco.
+- Troca em Aparência → Tema, no painel rápido (deslizar para baixo no rosto) ou no portal.
+
+## 4. Cor das expressões **(v3)**
+
+- Independente do tema. As 4 primeiras acompanham as **cores físicas** do produto; cada cor tem uma versão para o tema escuro e outra para o claro:
+
+| Cor | No tema escuro | No tema claro |
+|---|---|---|
+| Vermelho | vermelho vivo | vermelho mais fechado |
+| Azul | azul claro | azul royal |
+| **Branco** | branco frio | cinza-azulado (branco no fundo branco sumiria) |
+| **Grafite** | prata (grafite no preto sumiria) | grafite escuro |
+| Ciano, Verde, Lilás, Rosa, Amarelo, Laranja | versão luminosa | versão mais escura e legível |
+
+- Tela **Cor das expressões** com prévia ao vivo do rosto; a cor também vira a cor de destaque da interface (botões, alternadores).
+- O padrão de cada unidade vem do **perfil de fábrica** (ex.: TubaBot vermelho → expressões vermelhas).
+
+## 5. Lite e Pro — propriedade de fábrica **(v3)**
+
+- **O firmware é um só.** O modelo é definido no perfil de fábrica gravado na bancada — o usuário **não** escolhe.
+- **Lite:** sem bateria. Leitura de bateria, aviso de bateria fraca, expressão "Cansado" por bateria, ícone e a opção "Mostrar bateria" ficam **ocultos/desativados** (também na API e no portal).
+- **Pro:** bateria LiPo (carregador da própria placa). Nível em %/mV no "Hoje", no painel rápido, em Informações e (se ligado) sobre o rosto; aviso único ao chegar a 10%.
+
+## 6. Configuração de fábrica × preferências do usuário **(v3)**
+
+| Fábrica (por unidade, gravado por nós) | Usuário (pode mudar) |
+|---|---|
+| Modelo Lite/Pro | tema, cor das expressões |
+| Cor física do corpo | informações na tela (hora, clima, bateria) |
+| Cor padrão das expressões | volume, brilho, silencioso |
+| Tema padrão | personalidade, animação, relógio, apelido... |
+| Outros padrões (volume, brilho, personalidade, 24 h, fuso, informações na tela) e nº de série | Wi-Fi, alarmes, lembretes, timers |
+
+- Perfil gravado numa **partição própria de 4 KB** (`fabrica`, endereço 0xFEF000) — não é apagado por OTA, nem por regravar o firmware completo, nem por "Restaurar padrão de fábrica". Detalhes e passo a passo: [`FABRICA.md`](FABRICA.md).
+- **Restaurar padrão de fábrica** (Sistema, ou portal): apaga preferências, apelido, recordes, conquistas e Wi-Fi e volta ao primeiro uso **com os padrões daquela unidade** (um TubaBot vermelho volta vermelho).
+- **Redefinir preferências** (portal): volta tema/cor/ajustes aos padrões da unidade, mantendo conquistas e recordes.
+- Unidade sem perfil gravado: funciona como Lite genérico (grafite, escuro) e mostra o aviso em Informações → Fábrica.
+
+## 7. Toque
+
+Classificação **exclusiva** ao soltar (uma interação = no máximo um destes): toque, duplo toque, toque longo solto, deslize (4 direções), carinho, recuperação. Limiares ajustados para a tela de 2,8" (≈143 ppi).
 
 | Onde | Toque | Duplo toque | Segurar parado | Acariciar (arrastar devagar) | Deslizar |
 |---|---|---|---|---|---|
-| Rosto | "boop": reage e olha para onde tocou | próxima expressão | 0,6–2 s: carinho · ≥ 2 s: amor (corações) | carinho + ronronar | ← → relógio / "Hoje" · ↑ apps · ↓ ajustes rápidos |
-| Relógio / Hoje | — | — | relógio: troca o mostrador | — | ← → páginas · ↑ apps · ↓ ajustes |
-| Apps e listas | abre o item / aperta o botão | — | — | arrastar rola a lista (com inércia) | → voltar |
+| Rosto | reage, olha para o dedo e **mostra os controles** | próxima expressão | 0,6–2 s: carinho · ≥ 2 s: amor | carinho + ronronar | ← → relógio / "Hoje" · ↑ menu · ↓ painel rápido |
+| Relógio / Hoje | — | — | relógio: troca o mostrador | — | ← → páginas · ↑ menu · ↓ painel |
+| Menus e apps | abre / aperta | — | — | arrastar rola a lista (com inércia) | → voltar |
 | Jogos | ação imediata no instante real do toque | — | 1,5 s: sair | Mergulho: o dedo guia o Tuba | — |
 | Qualquer lugar | — | — | ≥ 8 s e soltar: **abrir configuração** | — | — |
 
-- Botão **BOOT** da placa: toque curto = voltar ao rosto/acordar; segurar 3 s = abrir configuração (recuperação mesmo com a tela de toque com defeito).
-- Botão **PWR**: toque curto apaga/acende a tela.
-- Toque contínuo por 20 s (sujeira/defeito): aviso "Toque contínuo" e nada é disparado até soltar.
-- Tela girada 180° (preferência): o toque gira junto.
-- Logo após acordar a tela, toques rápidos (ex.: duplo toque para acordar) não viram ação.
+- Botão **BOOT**: curto no rosto = apaga/acende a tela; curto em outra tela = volta ao rosto; segurar 3 s = abre a configuração (recuperação mesmo com o toque com defeito).
+- Toque contínuo por 20 s: aviso "Toque contínuo" e nada é disparado até soltar.
 
-## 3. Navegação
+## 8. Menu **(v3)**
 
-- **Página inicial (carrossel):** Rosto ↔ Relógio ↔ Hoje.
-- **Apps** (deslize para cima): Relógio, Pomodoro, Timers, Cronômetro, Alarmes **(novo)**, Jogos, Expressões, Respiração **(novo)**, Nível **(novo)**, Sorteio **(novo)**, Clima **(novo)**, Meu Tuba **(novo)**, Ajustes **(novo, no próprio aparelho)**, Informações. Lista com efeito "lupa" (o item central é o maior).
-- **Ajustes rápidos** (deslize para baixo): silencioso, reagir a sons (liga/desliga o uso do microfone), lanterna **(novo)**, rede; brilho e volume por controle deslizante.
-- Voltar: deslizar para a direita ou o "‹" na borda esquerda. Listas e apps passivos voltam ao rosto após 30 s sem toque.
+Menu principal em grade 3×3, feito para o dedo:
 
-## 4. Abertura
+| | | |
+|---|---|---|
+| **Jogos** | **Pomodoro** | **Timer** |
+| **Aparência** (tema, cor das expressões, informações na tela, brilho dos olhos, relógio) | **Volume** (com silencioso) | **Brilho** (com brilho reduzido à noite) |
+| **Wi-Fi** (rede de casa, configurar pelo celular, rede do Tuba, esquecer) | **Sistema** (personalidade, animação, apagar a tela, 24 h, silencioso, reagir a sons, girar 180°, informações, restaurar padrão de fábrica) | **Mais apps** |
 
-1. Mar animado com duas ondas; a **barbatana** atravessa a tela;
-2. a barbatana mergulha (bolhas) enquanto **TubaBot** aparece;
-3. os olhos abrem piscando na expressão favorita;
-4. "Oi, <apelido>!" na cor dos olhos e uma "falinha" de robô.
+**Mais apps:** Cronômetro, Alarmes, Relógio, Clima, Respirar, Sorteio, Expressões, Meu Tuba, Sobre.
+**Painel rápido** (deslizar para baixo no rosto): silencioso, tema claro/escuro, reagir a sons, lanterna, Wi-Fi + brilho e volume deslizantes.
 
-Completa ≈ 2,8 s; curta ≈ 0,9 s. Um toque pula. Não depende de rede. O som de abertura respeita silencioso/volume salvos desde a primeira amostra.
+## 9. Expressões e personalidade
 
-## 5. Rosto, expressões e personalidade
+- 34 expressões paramétricas com transições suaves, piscar simples/duplo, olhar para os lados, respiração, olhar que segue o dedo, dança no ritmo da música, "boop" (o rosto achata e volta). Básicas: Feliz, Neutro, Surpreso, Apaixonado, Triste, Sonolento (dormir/acordar), Bravo (irritação), Piscadinhas, Carinho, Olhos em X; de contexto: Foco (concentração), Descanso, Acerto, Quase! (derrota por pouco), Comemoração (vitória), Esperando; reações: Tonto, Assustado, Apertado, Carregando, Cansado, Curioso.
+- **Coleção** de 10 desbloqueáveis (Tímido, Focado, Vitorioso, Satisfeito, Espantado, Precisão, Dançante, Zen, Mergulhador, Radiante).
+- Personalidades Tranquilo/Brincalhão mudam ritmo de piscadas, alcance do olhar, microreações e a resposta ao toque. Humor, energia e vínculo em **Meu Tuba**.
 
-- 34 expressões paramétricas: olhos com pálpebras inclinadas, bochechas, reflexo de luz, halo luminoso; transições suaves (interpolação de formato; troca de tipo passa por uma piscada), piscar simples/duplo, olhar ocioso, **respiração** (os olhos "respiram"), **olhar dirigido** (segue o dedo e a inclinação **(novo)**), **dança no ritmo** **(novo)**.
-- Básicas: Feliz, Neutro, Surpreso, Apaixonado, Triste, Sonolento, Bravo, Piscadinhas, Carinho, Olhos em X. De contexto: Foco, Descanso, Acerto, Quase!, Comemoração, Esperando. Reações **(novo)**: Tonto, Assustado, Apertado (barulho), Carregando, Cansado, Curioso.
-- **Coleção (10 desbloqueáveis):**
+## 10. Som e microfone
 
-| Expressão | Critério |
-|---|---|
-| Tímido | primeiro carinho |
-| Focado | primeiro Pomodoro completo |
-| Vitorioso | 10 corais em uma partida de Pula, Tuba! |
-| Satisfeito | 5 peixes na Hora do Bote |
-| Espantado | 5 rodadas válidas de Reflexo (acumulado) |
-| Precisão | ≥ 98% no Tempo Certo |
-| Dançante **(novo)** | 30 s dançando com música (acumulado) |
-| Zen **(novo)** | 3 sessões de respiração |
-| Mergulhador **(novo)** | 20 peixes no Mergulho |
-| Radiante **(novo)** | conquistar todas as outras (olhos arco-íris) |
+- Sintetizador no núcleo (16 kHz, 2 vozes): melodias de abertura, alarme, timer, Pomodoro, lembrete, recorde, conquista; reações e "falinha" de robô. Volume 0–100%.
+- Microfone da placa (via ES8311): **só o nível** chega ao núcleo — palma assusta, barulho alto incomoda, música faz dançar. Nada é gravado. Pode ser desligado (Sistema ou painel).
+- Política central: sem alto-falante ou em silencioso → só visual.
 
-- Personalidades Tranquilo/Brincalhão mudam ritmo de piscadas, alcance do olhar, chance de microreações e a "resposta" ao boop (risadinha, piscadinha, surpresa, curiosidade). Humor, energia e vínculo (−100..100, 0..100, 0..1000) aparecem em **Meu Tuba**.
-- Energia baixa, madrugada (hora válida) ou bateria ≤ 10% → sonolento/cansado; Pomodoro em foco → Foco (sem microreações).
+## 11. Jogos
 
-## 6. Sensores (novo)
+A lógica dos jogos é a mesma (mesmos testes de justiça, física e pontuação); o "mundo" 128×64 é ampliado 2,4× ocupando a largura da tela em paisagem.
 
-### Movimento (QMI8658)
-| Evento | Reação |
-|---|---|
-| Sacudir (3 picos fortes em 1 s) | olhos em espiral (Tonto) + som de tontura; no Sorteio, sorteia |
-| Pegar no colo (após ≥ 2 s parado) | susto rápido + "falinha"; acende a tela (opcional) |
-| Virar de cara para baixo | apaga a tela; se houver alarme/lembrete tocando, **adia** (opção) |
-| Desvirar | acende |
-| Deitar (tela para cima) | descansa e olha para cima |
-| De ponta-cabeça | fica tonto |
-| Inclinar | os olhos acompanham a gravidade |
+- **Pula, Tuba!**, **Tuba Reflexo** (mede a partir da apresentação do "AGORA!"), **Hora do Bote** (peixe 100% dentro do quadro), **No Tempo Certo**, **Mergulho do Tuba** (o dedo guia o Tuba; palco 210×210 com placar e vidas nas laterais).
 
-### Som ambiente (2 microfones, ES7210)
-Só o **nível** (≈ dBFS + 100, a cada 40 ms) chega ao núcleo — nenhum áudio é gravado, guardado ou transmitido. Pode ser desligado nos ajustes rápidos.
-- Palma (salto ≥ 24 acima da base, curto) → susto; barulho alto contínuo (≥ 1,5 s) → olhos apertados.
-- **Música** (ataques regulares de 250–1200 ms) → o rosto **dança na batida** estimada; conta para "Dançante".
+## 12. Tempo
 
-### Energia (AXP2101) e relógio (PCF85063)
-- Bateria (%), mV, carregando e USB na barra de status, no "Hoje" e no portal. Ao começar a carregar: expressão Carregando + som. Bateria ≤ 10%: aviso único + Cansado.
-- **RTC com bateria (novo):** a hora sobrevive a desligar. Ajustar a hora (portal/NTP) grava no RTC; no boot o firmware lê o RTC. Um RTC zerado é ignorado (não inventa data).
+- **Pomodoro** 25/5/15 (anel + botões ao lado), **3 timers**, **cronômetro** com voltas, **3 alarmes** com dias da semana, **lembretes** por intervalo, retomada após falta de energia (pausado).
+- **Hora:** a ES3C28P não tem relógio com bateria. A hora vem da **rede de casa (NTP, ligado por padrão)** ou do portal; sem rede, aparece "Hora não ajustada" até ser ajustada (timers e Pomodoro não dependem dela).
 
-## 7. Som (novo: alto-falante de verdade)
+## 13. Apps
 
-Sintetizador no núcleo (16 kHz, 2 vozes, ondas seno/triângulo/quadrada/ruído, envelope sem estalos): melodias de abertura, alarme, timer, Pomodoro, lembrete, recorde, conquista; reações (boop, risadinha, tontura, susto, bocejo, ronronar); **"falinha" de robô** gerada por semente. Volume 0–100% (curva perceptiva). Comunicação com a tarefa de áudio por fila sem travas.
+Hoje, Relógio (digital, analógico e "Tuba"), Clima (Open-Meteo, 27 capitais), Respiração, Sorteio, Expressões, Meu Tuba, Lanterna, Informações (Sobre, Fábrica, Rede, Hora, Memória, Sensores, Recordes).
 
-### Política central (todas as saídas)
-| Situação | Som | Vibração (motor opcional) | Visual |
-|---|---|---|---|
-| Sem alto-falante | nunca | se houver motor e estiver ligada | sempre |
-| Som ligado, sem silencioso, volume > 0 | sim | se habilitada | sempre |
-| Silencioso | nunca | se habilitada | sempre |
-| Silencioso + vibração desligada | nunca | nunca | sempre |
+## 14. Portal local
 
-Desligar som/vibração corta o que está tocando. Padrões comuns têm teto de 6 s; o **alarme** toca até 2 min e depois fica só visual. Sons de interface usam outro canal e não interrompem um alerta.
+Rede `TubaBot-XXXX` com senha própria, `http://192.168.4.1`, QR Codes no primeiro uso. Abas: Meu Tuba, Aparência (**tema**, **cor das expressões** com amostras no tema escolhido, **informações sobre o rosto**), Som, Foco e tempo, Jogos, Coleção, Hora e data, Sensores e clima, Conectividade, Sistema (dados da unidade, OTA, **Restaurar padrão de fábrica**), Diagnóstico. Espelho da tela 160×120 no topo.
 
-## 8. Os cinco jogos
+## 15. Fora desta versão
 
-A lógica dos quatro jogos da v1 é **a mesma** (mesmos testes de justiça, física e pontuação); o "mundo" 128×64 é ampliado 3× com gráficos coloridos (mar, areia, corais, tubarão e peixe vetoriais, bolhas, raios de luz).
-
-- **Pula, Tuba!** — passo fixo de 4 ms; espaçamento sempre possível; buffer de 120 ms; hitbox honesta.
-- **Tuba Reflexo** — mede a partir da **apresentação** do "AGORA!" no painel; antes do sinal = inválida.
-- **Hora do Bote** — captura só com o peixe 100% dentro do quadro (1 px fora = erro); acelera por captura.
-- **No Tempo Certo** — alvo 3,00–8,00 s; 3-2-1-VAI; proximidade em inteiros (7,43/7,50 → 99,06%).
-- **Mergulho do Tuba (novo)** — peixes e águas-vivas descem; o Tuba é guiado pela **inclinação** (IMU) ou pelo dedo; 3 vidas, 1 s de invulnerabilidade após ser queimado; dificuldade cresce com a pontuação; regra de justiça: duas águas-vivas seguidas nunca fecham a passagem. Passo fixo de 10 ms (mesmo resultado a 16 ou 50 ms por quadro).
-
-Alerta durante o jogo: Pula/Bote/Mergulho pausam (o tempo congela); Reflexo/Tempo Certo invalidam a rodada.
-
-## 9. Tempo
-
-- **Pomodoro** 25/5/15 (anel de progresso; botões cancelar · iniciar/pausar · pular). Continua fora da tela e aparece como anel fino em volta do rosto.
-- **3 timers** simultâneos com atalhos e personalizado; anel âmbar em volta do rosto enquanto contam.
-- **Cronômetro** com centésimos e **voltas** **(novo)**; zerar pede confirmação.
-- **Alarmes (novo):** 3 alarmes com nome, hora, dias da semana (ou "uma vez"), tela de edição no aparelho e no portal; adiar 5 min (botão ou virar para baixo); alarme único se desliga ao confirmar; nunca dispara retroativamente quando a hora é ajustada; cada minuto dispara no máximo uma vez.
-- **Lembretes** por intervalo (iguais à v1), esperando o fim do foco; período de descanso.
-- **Retomada após falta de energia** (pausado, sem adivinhar o tempo desligado).
-
-## 10. Apps novos
-
-- **Hoje:** saudação pelo horário, data, clima, próximo alarme, Pomodoro/timers ativos, humor e bateria.
-- **Respiração:** caixa 4-4-4-4, relaxar 4-7-8 e coerente 5-5; círculo que enche/esvazia, contagem e som suave a cada fase.
-- **Nível (bolha):** em pé mostra o ângulo do horizonte; deitado vira nível de bolha 2D; fica verde abaixo de 1°.
-- **Sorteio:** dado, cara ou coroa, sim ou não, número 1–100; toque ou **sacuda** para sortear.
-- **Clima:** temperatura, condição, máx/mín, umidade e 2 dias seguintes; 27 capitais ou coordenadas próprias; atualiza a cada 30 min (5 min após falha, mantendo o último dado bom). Fonte: [Open-Meteo](https://open-meteo.com) (sem chave). O firmware faz o HTTPS numa tarefa separada (a tela nunca trava). O certificado não é fixado porque a CA do serviço pode mudar; a resposta passa pelo validador JSON do núcleo. Uso pessoal/não comercial conforme os termos do Open-Meteo.
-- **Meu Tuba:** humor, energia, vínculo e estatísticas.
-- **Lanterna:** tela branca no brilho máximo.
-- **Ajustes no aparelho:** brilho, volume, cor e brilho dos olhos, mostrador, personalidade, animação, 24 h, apagar a tela, reações a movimento/sons, vibração, silencioso, girar 180°, rede e portal, informações.
-
-## 11. Portal local e configuração
-
-Rede `TubaBot-XXXX` com senha própria por aparelho, `http://192.168.4.1`, DNS cativo e mDNS (como na v1). **Novo:** o primeiro uso mostra **QR Codes** — um para entrar na rede do Tuba pela câmera do celular e outro para abrir o portal. Abas: Meu Tuba, Aparência (cor dos olhos, mostrador, brilho), Som e vibração (volume), Foco e tempo (Pomodoro, timers, **alarmes**, lembretes), Jogos, Coleção, Hora e data, **Sensores e clima**, Conectividade, Sistema, Diagnóstico. Espelho colorido da tela no topo. Backup/restauração (aceita backup da v1).
-
-## 12. Não implementado (de propósito ou pendente)
-
-- Reconhecimento de voz / "palavra de ativação": possível no ESP32-S3 (ESP-SR), mas exigiria gravar e processar áudio — fora da proposta de privacidade desta versão. Fica como ideia (ver `docs/IDEIAS.md`).
-- Bluetooth (notificações do celular), cartão microSD e GPS (só na placa `-G`): não usados.
-- Rollback automático de OTA depende do bootloader; a imagem é marcada como válida no boot.
+- Sensor de movimento: a ES3C28P não tem. A lógica (sacudir, inclinar, Nível) continua no núcleo e testada, mas fica oculta (`caps.imu = false`).
+- LED RGB da placa (mantido apagado), cartão microSD, Bluetooth, voz: ideias em [`IDEIAS.md`](IDEIAS.md).

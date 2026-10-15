@@ -1,4 +1,4 @@
-// Executa tests/scenario.h no núcleo nativo e imprime CRCs da imagem 466×466.
+// Executa tests/scenario.h no núcleo nativo e imprime CRCs da imagem 320×240.
 #include "fake_platform.h"
 #include "scenario.h"
 #include <cstdio>
@@ -22,8 +22,9 @@ struct CrossPlatform : FakePlatform {
 
 int main() {
   CrossPlatform p; std::vector<uint16_t> fb(SCR_W * SCR_H);
+  p.setFactory(Model::Pro, 0, 0);
   App a(p); a.attachFramebuffer(fb.data());
-  HwCaps c; c.motor = true;
+  HwCaps c; c.motor = false; c.imu = false; c.rtc = false; c.battery = true; c.mic = true; c.speaker = true;
   a.begin(c, 0, 99, true);
   ms_t t = 0; size_t n = sizeof(SCENARIO) / sizeof(SCENARIO[0]);
   for (size_t i = 0; i < n; i++) {

@@ -10,7 +10,7 @@ __attribute__((import_name("js_storage_erase"))) void js_storage_erase(int kind)
 __attribute__((import_name("js_log"))) void js_log(const char* msg);
 __attribute__((import_name("js_reboot"))) void js_reboot();
 __attribute__((import_name("js_display"))) void js_display(int brightness, int rotate);
-__attribute__((import_name("js_rtc"))) void js_rtc(double epoch);
+__attribute__((import_name("js_rtc"))) void js_rtc(double epoch);  // não usado na ES3C28P (sem RTC)
 void __cxa_pure_virtual() { __builtin_trap(); }
 }
 
@@ -18,8 +18,17 @@ inline void* operator new(size_t, void* p) noexcept { return p; }
 
 using namespace tb;
 
+// Perfil de fábrica da unidade simulada (equivale à partição "fabrica").
+static char factoryText[FACTORY_MAX];
+static size_t factoryLen = 0;
+
 class SimPlatform : public Platform {
  public:
+  bool factoryLoad(char* buf, size_t cap, size_t* len) override {
+    *len = 0;
+    if (!factoryLen || factoryLen > cap) return false;
+    tbMemcpy(buf, factoryText, factoryLen); *len = factoryLen; return true;
+  }
   bool apActive = false, staConfigured = false, wifiBroken = false;
   char staSsid[33] = {0};
   uint32_t serial = 0xAB12;
@@ -76,6 +85,27 @@ static char urlBuf[512];
 #define EXPORT(n) __attribute__((export_name(n)))
 
 extern "C" {
+// Perfil de fábrica: o JS guarda o texto (como a partição) e o entrega antes do sim_init.
+EXPORT("sim_factory_set") void sim_factory_set(int len) {
+  factoryLen = (size_t)(len > 0 && len <= (int)FACTORY_MAX ? len : 0);
+  if (factoryLen) tbMemcpy(factoryText, inBuf, factoryLen);
+}
+// Monta um perfil a partir de linhas "chave=valor" (inBuf), igual ao "fabrica-gravar" do
+// firmware: valida com o núcleo e devolve o texto canônico com CRC em outBuf (−1 = inválido).
+EXPORT("sim_factory_compose") int sim_factory_compose(int len) {
+  static char tmp[FACTORY_MAX];
+  StrBuf t(tmp, sizeof tmp);
+  t.put("TUBABOT-FABRICA 1\n").putN(inBuf, (size_t)(len > 0 ? len : 0));
+  if (t.len && tmp[t.len - 1] != '\n') t.put('\n');
+  uint32_t c = crc32((const uint8_t*)tmp, t.len);   // antes de escrever "crc=" (ordem de avaliação!)
+  t.put("crc=").hex(c, 8).put('\n');
+  FactoryConfig f; const char* why = nullptr;
+  if (t.overflow || !parseFactory(tmp, t.len, f, &why) || why) {
+    StrBuf o(outBuf, sizeof outBuf); o.put(why ? why : "perfil inválido");
+    return -1;
+  }
+  return (int)formatFactory(f, outBuf, sizeof outBuf);
+}
 // caps: bit0 alto-falante, bit1 motor, bit2 IMU, bit3 microfone, bit4 bateria, bit5 RTC
 EXPORT("sim_init") void sim_init(uint32_t seed, int dev, double now, int caps) {
   bool keepNet = plat != nullptr;

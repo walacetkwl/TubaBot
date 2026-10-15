@@ -27,7 +27,7 @@ await page.screenshot({ path: `${out}/01_primeiro_uso.png` });
 // Portal: assistente
 const fr = page.frameLocator('#portal');
 await page.click('.tabs button[data-p=portal]');
-await fr.locator('#wNick').waitFor({ timeout: 5000 });
+await fr.locator('#wNick').waitFor({ timeout: 12000 });
 await fr.locator('#wNick').fill('Júlia');
 await fr.locator('[data-step="0"] [data-next]').click();
 await page.waitForTimeout(400);
@@ -37,34 +37,60 @@ await fr.locator('#wDone').click();
 await page.waitForTimeout(800);
 ok((await state()).includes('face'), 'assistente do portal conclui o primeiro uso (rosto)');
 await page.screenshot({ path: `${out}/02_portal.png` });
-// Toque na tela redonda (mouse = dedo)
+// Toque na tela 320×240 em paisagem (mouse = dedo)
 await page.click('.tabs button[data-p=log]');
 const scr = page.locator('#scr');
 const box = await scr.boundingBox();
-const P = (x, y) => [box.x + x * box.width / 466, box.y + y * box.height / 466];
+ok(Math.abs(box.width / box.height - 320 / 240) < 0.02, 'tela do simulador em paisagem 4:3 (320×240)');
+const P = (x, y) => [box.x + x * box.width / 320, box.y + y * box.height / 240];
 async function swipe(x0, y0, x1, y1) { await page.mouse.move(...P(x0, y0)); await page.mouse.down(); for (let i = 1; i <= 6; i++) { await page.mouse.move(...P(x0 + (x1 - x0) * i / 6, y0 + (y1 - y0) * i / 6)); await page.waitForTimeout(20); } await page.mouse.up(); await page.waitForTimeout(500); }
-await page.mouse.move(...P(233, 233)); await page.mouse.down(); await page.waitForTimeout(1300); await page.mouse.up();
+await page.mouse.move(...P(120, 120)); await page.mouse.down(); await page.waitForTimeout(1300); await page.mouse.up();
 await page.waitForTimeout(500);
 ok((await page.$eval('#log', e => e.textContent)).includes('carinho'), 'segurar o dedo na tela 1,3 s gera carinho');
-await swipe(233, 330, 233, 120);
-ok((await state()).includes('launcher'), 'deslizar para cima abre os apps');
-await page.screenshot({ path: `${out}/03_apps.png` });
-await swipe(130, 233, 360, 233);
+await swipe(160, 210, 160, 40);
+ok((await state()).includes('launcher'), 'deslizar para cima abre o menu');
+await page.screenshot({ path: `${out}/03_menu.png` });
+await swipe(60, 140, 270, 140);
 ok((await state()).includes('face'), 'deslizar para a direita volta ao rosto');
-await swipe(233, 120, 233, 330);
+await swipe(160, 40, 160, 210);
 ok((await state()).includes('quick'), 'deslizar para baixo abre os ajustes rápidos');
-await swipe(233, 330, 233, 120);
+await swipe(160, 210, 160, 40);
+// tocar no rosto mostra os controles; o botão do meio abre o menu
+await page.waitForTimeout(600);
+await page.mouse.move(...P(120, 120)); await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up();
+await page.waitForTimeout(900);
+await page.mouse.move(...P(295, 120)); await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up();
+await page.waitForTimeout(500);
+ok((await state()).includes('launcher'), 'tocar no rosto mostra os controles e o botão Menu funciona');
+await swipe(60, 140, 270, 140);
 // botão solto fora / perda de foco não prende o toque
-await page.mouse.move(...P(233, 233)); await page.mouse.down();
+await page.mouse.move(...P(160, 120)); await page.mouse.down();
 await page.mouse.move(5, 5); await page.mouse.up();
 await page.waitForTimeout(300);
 ok(!(await page.evaluate(() => window.TB.X.sim_pressed())), 'soltar fora da tela libera o toque');
-// sensores simulados
-await page.click('.tabs button[data-p=sens]');
-await page.click('#shake'); await page.waitForTimeout(700);
-ok((await state()).includes('Tonto'), 'sacudir deixa o Tuba tonto');
-await page.waitForTimeout(3000);
-await page.screenshot({ path: `${out}/04_rosto.png` });
+// perfil de fábrica: Pro vermelho (padrão do simulador) -> Lite azul, tema claro
+let st = await page.evaluate(() => window.TB.api('GET', '/api/status').body);
+ok(st.factory.model === 'pro' && st.factory.body === 'vermelho' && st.power.applicable === true, 'simulador começa como TubaBot Pro vermelho');
+await page.click('.tabs button[data-p=fab]');
+await page.selectOption('#fModel', 'lite'); await page.selectOption('#fBody', 'azul'); await page.selectOption('#fTheme', 'claro');
+await page.click('#fWrite'); await page.waitForTimeout(4500);
+st = await page.evaluate(() => window.TB.api('GET', '/api/status').body);
+const pr = await page.evaluate(() => window.TB.api('GET', '/api/prefs').body.prefs);
+ok(st.factory.model === 'lite' && st.factory.body === 'azul' && st.power.applicable === false, 'perfil Lite azul gravado (sem bateria)');
+ok(pr.theme === 'claro' && pr.eyeColor === 'azul' && pr.showBattery === undefined, 'padrões de fábrica aplicados (tema claro, expressões azuis)');
+ok((await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--body').trim())) === '#2e6ccb', 'corpo do simulador fica azul');
+ok(await page.locator('#pwrPro').isHidden(), 'aba Energia esconde a bateria no Lite');
+await page.screenshot({ path: `${out}/04_lite_azul_claro.png` });
+// volta para Pro vermelho escuro mantendo os dados (o resto do teste usa o portal configurado)
+await page.selectOption('#fModel', 'pro'); await page.selectOption('#fBody', 'vermelho'); await page.selectOption('#fTheme', 'escuro');
+await page.click('#fWrite'); await page.waitForTimeout(4500);
+await page.click('.tabs button[data-p=portal]');
+await page.frames().find(f => f.url().includes('portal.html')).evaluate(() => location.reload());
+await fr.locator('#wNick').waitFor({ timeout: 12000 });
+await fr.locator('#wNick').fill('Júlia');
+await fr.locator('[data-step="0"] [data-next]').click(); await page.waitForTimeout(400);
+await fr.locator('[data-step="1"] [data-next]').click(); await page.waitForTimeout(400);
+await fr.locator('#wDone').click(); await page.waitForTimeout(800);
 // Portal (já configurado) mostra abas
 await page.click('.tabs button[data-p=portal]');
 await page.waitForTimeout(1500);
@@ -78,9 +104,12 @@ await page.waitForTimeout(500);
 await page.screenshot({ path: `${out}/05_colecao.png` });
 await fr.locator('button[data-tabbtn="Aparência"]').click();
 await fr.locator('#eyeColors button[data-v=rosa]').click();
+await fr.locator('#theme button[data-v=claro]').click();
+await fr.locator('#showClock').evaluate(e => { e.checked = true; });
 await fr.locator('[data-save=look]').click();
 await page.waitForTimeout(500);
-ok((await page.evaluate(() => window.TB.api('GET', '/api/prefs').body.prefs.eyeColor)) === 'rosa', 'portal troca a cor dos olhos');
+const pr2 = await page.evaluate(() => window.TB.api('GET', '/api/prefs').body.prefs);
+ok(pr2.eyeColor === 'rosa' && pr2.theme === 'claro' && pr2.showClock === true, 'portal troca cor das expressões, tema e informações na tela');
 await fr.locator('button[data-tabbtn="Foco e tempo"]').click();
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${out}/06_foco.png` });

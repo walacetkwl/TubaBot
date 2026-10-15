@@ -1,4 +1,4 @@
-# API local do TubaBot v2
+# API local do TubaBot v3
 
 Implementada uma única vez em `core/app_api.cpp` e usada igual pelo ESP32 (HTTP) e pelo simulador (postMessage → WebAssembly). Respostas sempre em JSON UTF-8 com `"ok": true|false`.
 
@@ -15,9 +15,9 @@ Implementada uma única vez em `core/app_api.cpp` e usada igual pelo ESP32 (HTTP
 
 | Rota | Conteúdo |
 |---|---|
-| `/api/status` | modelo (`v2`), versão, apelido, tela, expressão, tempo de atividade, hora (válida?), rede, `caps` (alto-falante, motor, IMU, microfone, bateria, RTC), saídas (som/vibração permitidos, volume, brilho aplicado), Pomodoro, 3 timers, cronômetro, avisos pendentes, toque, `motion` (pose, inclinação), `sound` (nível, música), `power` (bateria %, mV, carregando, USB), `weather`, `nextAlarm`, armazenamento, último evento |
-| `/api/frame` | miniatura da tela 117×117 (1 pixel a cada 4) em RGB565 little-endian, base64 — o "espelho" do portal |
-| `/api/options` | cidades do clima (capitais) e cores dos olhos (`key`, `name`, `hex`) |
+| `/api/status` | modelo (`TubaBot Lite`/`TubaBot Pro`), versão, `factory` (perfil: presente?, `model`, `body`, `exprColor`, `theme`, `serial`, aviso), `display` (320×240, paisagem, tema), apelido, tela, expressão, tempo de atividade, hora (válida?), rede, `caps` (alto-falante, motor, IMU, microfone, bateria, RTC), saídas (som/vibração permitidos, volume, brilho aplicado), Pomodoro, 3 timers, cronômetro, avisos pendentes, toque, `motion` (pose, inclinação), `sound` (nível, música), `power` (`applicable: false` no Lite; no Pro: bateria %, mV), `weather`, `nextAlarm`, armazenamento, último evento |
+| `/api/frame` | miniatura da tela 160×120 (1 pixel a cada 2) em RGB565 little-endian, base64 contínuo — o "espelho" do portal |
+| `/api/options` | cidades do clima; cores das expressões (`key`, `name`, `hex` no tema atual, `dark`, `light`); cores físicas (`bodies`) |
 | `/api/prefs` | todas as preferências |
 | `/api/records` | progresso e recordes |
 | `/api/collection` | expressões básicas e as 10 desbloqueáveis com critério e progresso |
@@ -34,7 +34,7 @@ Implementada uma única vez em `core/app_api.cpp` e usada igual pelo ESP32 (HTTP
 | `/api/action` | `{action, ...}` | ver abaixo |
 | `/api/backup` | `{}` | preferências + progresso (sem segredos) |
 | `/api/restore` | conteúdo de um backup | preferências validadas; progresso só aumenta (nunca apaga conquistas) |
-| `/api/reset` | `{scope, confirm}` | `wifi`+`ESQUECER`, `prefs`+`REDEFINIR`, `all`+`APAGAR TUDO` |
+| `/api/reset` | `{scope, confirm}` | `wifi`+`ESQUECER`; `prefs`+`REDEFINIR` (padrões da unidade, mantém conquistas); `factory`+`FABRICA` (restaurar padrão de fábrica: apaga dados do usuário e reinicia; o perfil de fábrica fica) |
 | `/api/wifi` | `{ssid, pass}` | senha vazia ou WPA de 8–63 caracteres |
 | `/update` (só firmware) | multipart com o `.bin` + cabeçalhos `X-Tuba-Token` e `X-Tuba-Size` | recusa se houver Pomodoro/timer/cronômetro/jogo em andamento; valida magic 0xE9, chip ESP32-S3 (id 9) e tamanho |
 
@@ -42,6 +42,8 @@ Ações (`/api/action`): `pomodoro.toggle|skip|cancel`, `timer.start|pause|resum
 
 ## Preferências (`prefs`)
 
-`setupDone`, `nickname` (≤12 caracteres, cabe na tela), `personality` (`tranquilo|brincalhao`), `brightness` (1–255; o nome `contrast` da v1 também é aceito), `rotate180`, `favoriteExpr`, `animLevel` (0–2), `screenOffS` (0 ou 30–3600), `shortIntro`, `sound`, `silent`, `vibration`, `pomodoro{focusMin 1–120, shortMin 1–60, longMin 1–90, cyclesBeforeLong 1–12, autoStart}`, `timerPresetsS[6]` (1–86399), `reminders[3]{label 1–16, intervalMin 5–240, enabled}`, `quiet{enabled,startH,endH}`, `tz`, `clock24h`, `jumpEasy`, `apTimeoutMin` (0–120), `weatherEnabled`, `ntpEnabled`, `volume` (0–100), `eyeColor` (`ciano|menta|lilas|rosa|ambar|azul|coral|branco`), `eyeGlow`, `watchFace` (0 digital, 1 analógico, 2 Tuba), `imuReactions`, `micReactions`, `tiltLook`, `faceDownSnooze`, `nightDim`, `wakeOnPickup`, `alarms[3]{label 1–12, hour 0–23, minute 0–59, days bitmask 0–127 (bit0 = domingo; 0 = uma vez), enabled}`, `weather{city (chave da lista ou `custom`), latE4, lonE4}` (graus × 10⁴).
+`setupDone`, `nickname` (≤12 caracteres, cabe na tela), `personality` (`tranquilo|brincalhao`), `brightness` (1–255; o nome `contrast` da v1 também é aceito), `rotate180`, `favoriteExpr`, `animLevel` (0–2), `screenOffS` (0 ou 30–3600), `shortIntro`, `sound`, `silent`, `vibration`, `pomodoro{focusMin 1–120, shortMin 1–60, longMin 1–90, cyclesBeforeLong 1–12, autoStart}`, `timerPresetsS[6]` (1–86399), `reminders[3]{label 1–16, intervalMin 5–240, enabled}`, `quiet{enabled,startH,endH}`, `tz`, `clock24h`, `jumpEasy`, `apTimeoutMin` (0–120), `weatherEnabled`, `ntpEnabled`, `volume` (0–100), `eyeColor` (cor das expressões: `vermelho|azul|branco|grafite|ciano|verde|lilas|rosa|amarelo|laranja`), `theme` (`escuro|claro`), `showClock`, `showWeather`, `showBattery` (só existe no Pro), `eyeGlow`, `watchFace` (0 digital, 1 analógico, 2 Tuba), `imuReactions`, `micReactions`, `tiltLook`, `faceDownSnooze`, `nightDim`, `wakeOnPickup`, `alarms[3]{label 1–12, hour 0–23, minute 0–59, days bitmask 0–127 (bit0 = domingo; 0 = uma vez), enabled}`, `weather{city (chave da lista ou `custom`), latE4, lonE4}` (graus × 10⁴).
 
-Backups da v1 (`version: 1`) podem ser importados: os campos conhecidos são aplicados e os novos ficam no padrão.
+O **modelo (Lite/Pro) e a cor física não são preferências**: não existem em `prefs` e só mudam pelo perfil de fábrica (`tools/fabrica.py` / comando serial `fabrica-gravar`).
+
+Backups da v1/v2 podem ser importados: os campos conhecidos são aplicados e os novos ficam no padrão da unidade.

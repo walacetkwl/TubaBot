@@ -409,11 +409,13 @@ int App::api(const char* method, const char* path, const char* body, size_t body
     static const int kStep = 2, kW = SCR_W / kStep, kH = SCR_H / kStep;
     JsonOut j(out); j.beginObj().kint("w", kW).kint("h", kH).kstr("layout", "rgb565le").kint("step", kStep);
     out.put(",\"data\":\"");
-    uint8_t row[kW * 2];
+    // 3 linhas por bloco: 960 bytes (múltiplo de 3) -> base64 contínuo, sem "=" no meio
+    uint8_t rows[3][kW * 2];
     const uint16_t* px = canvas_.pixels();
-    for (int y = 0; y < kH && !out.overflow; y++) {
-      for (int x = 0; x < kW; x++) { uint16_t v = px ? px[(y * kStep) * SCR_W + x * kStep] : 0; row[x * 2] = (uint8_t)v; row[x * 2 + 1] = (uint8_t)(v >> 8); }
-      b64(out, row, sizeof row);
+    for (int y = 0; y < kH && !out.overflow; y += 3) {
+      for (int k = 0; k < 3; k++)
+        for (int x = 0; x < kW; x++) { uint16_t v = px ? px[((y + k) * kStep) * SCR_W + x * kStep] : 0; rows[k][x * 2] = (uint8_t)v; rows[k][x * 2 + 1] = (uint8_t)(v >> 8); }
+      b64(out, &rows[0][0], sizeof rows);
     }
     out.put('"'); j.endObj();
     if (out.overflow) { out.len = 0; out.buf[0] = 0; out.overflow = false; return errorJson(out, 507, "buffer pequeno"); }

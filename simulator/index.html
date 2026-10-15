@@ -3,30 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TubaBot v2 · Simulador</title>
+<title>TubaBot v3 · Simulador</title>
 <style>
-:root{--ink:#e8eefc;--muted:#8fa0c4;--bg:#070d1c;--panel:#0f1830;--line:#22314f;--blue:#3b7bff;--ok:#36d399;--warn:#ffb020;--hood:#2b3550}
+:root{--ink:#e8eefc;--muted:#8fa0c4;--bg:#070d1c;--panel:#0f1830;--line:#22314f;--blue:#3b7bff;--ok:#36d399;--warn:#ffb020;--body:#c9303a}
 *{box-sizing:border-box}
 body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#14275a,transparent),var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 header{padding:14px 20px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
 header h1{margin:0;font-size:19px}header p{margin:0;color:var(--muted);font-size:13px}
-.wrap{display:grid;grid-template-columns:minmax(360px,560px) minmax(320px,1fr);gap:18px;padding:18px;max-width:1500px;margin:0 auto}
-@media (max-width:980px){.wrap{grid-template-columns:1fr}}
-.dev{position:relative;background:linear-gradient(180deg,#1b2440,#0d1428);border-radius:28px;padding:26px 22px;box-shadow:0 20px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)}
-.dev.shake .body{animation:sh .09s infinite}
-@keyframes sh{0%{transform:translate(0,0)}25%{transform:translate(1.5px,-1px)}50%{transform:translate(-1.5px,1px)}75%{transform:translate(1px,1px)}}
-.body{position:relative;width:min(100%,430px);aspect-ratio:1;margin:0 auto;transition:transform .25s}
-.hood{position:absolute;inset:0;border-radius:50% 50% 46% 46%;background:radial-gradient(circle at 50% 35%,#3a4766,var(--hood) 60%,#1c2338);box-shadow:inset 0 -14px 30px rgba(0,0,0,.45),0 18px 40px rgba(0,0,0,.5)}
-.phones{position:absolute;top:30%;width:15%;height:30%;border-radius:40%;background:linear-gradient(180deg,#ff8a3d,#d4602a);box-shadow:inset 0 -6px 10px rgba(0,0,0,.3)}
-.phones.l{left:-6%}.phones.r{right:-6%}
-.band{position:absolute;left:4%;right:4%;top:-4%;height:22%;border:9px solid #d4602a;border-bottom:none;border-radius:50% 50% 0 0}
-.bezel{position:absolute;inset:9%;border-radius:50%;background:#000;box-shadow:0 0 0 6px #10141f,0 0 0 9px #2a3245}
-canvas#scr{position:absolute;inset:9%;width:82%;height:82%;border-radius:50%;touch-action:none;cursor:pointer;display:block}
+.wrap{display:grid;grid-template-columns:minmax(380px,720px) minmax(320px,1fr);gap:18px;padding:18px;max-width:1560px;margin:0 auto}
+@media (max-width:1100px){.wrap{grid-template-columns:1fr}}
+.dev{background:linear-gradient(180deg,#1b2440,#0d1428);border-radius:28px;padding:34px 22px 22px;box-shadow:0 20px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06)}
+/* corpo do TubaBot (cor física vem do perfil de fábrica) */
+.body{position:relative;width:min(100%,660px);aspect-ratio:1.3;margin:24px auto 0}
+.shell{position:absolute;inset:0;border-radius:15% / 22%;background:radial-gradient(120% 90% at 30% 15%,color-mix(in srgb,var(--body) 75%,#fff),var(--body) 45%,color-mix(in srgb,var(--body) 70%,#000));box-shadow:inset 0 -18px 34px rgba(0,0,0,.35),inset 0 10px 18px rgba(255,255,255,.18),0 24px 40px rgba(0,0,0,.5)}
+.fin{position:absolute;left:44%;top:-13%;width:15%;aspect-ratio:1;background:linear-gradient(160deg,color-mix(in srgb,var(--body) 80%,#fff),var(--body));clip-path:polygon(15% 100%,100% 100%,62% 0)}
+.bezel{position:absolute;left:7.5%;top:8.5%;width:85%;height:83%;border-radius:4.5%;background:#05070c;box-shadow:inset 0 0 0 3px #0c1018,0 0 0 4px rgba(0,0,0,.25)}
+canvas#scr{position:absolute;left:10%;top:11%;width:80%;height:78%;border-radius:1.2%;touch-action:none;cursor:pointer;display:block;background:#000}
+.badge{position:absolute;right:6%;bottom:2.6%;font:700 11px/1 sans-serif;letter-spacing:.08em;color:rgba(255,255,255,.7);text-transform:uppercase}
 .btns{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
 .hw{background:#1d2a4b;border:1px solid #2f4170;color:var(--ink);border-radius:20px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
 .leds{display:flex;gap:18px;margin-top:12px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:13px}
 .led{display:inline-flex;align-items:center;gap:7px}.led i{width:12px;height:12px;border-radius:50%;background:#2a3554;box-shadow:inset 0 0 0 1px #3a4870}
-.led.on i{background:var(--warn);box-shadow:0 0 10px var(--warn)}.led.vib.on i{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.led.on i{background:var(--warn);box-shadow:0 0 10px var(--warn)}
 .state{margin-top:12px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}.state dt{color:var(--muted)}.state dd{margin:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;min-height:640px}
 .tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
@@ -37,49 +35,61 @@ canvas#scr{position:absolute;inset:9%;width:82%;height:82%;border-radius:50%;tou
 .btn{background:#1d2a4b;color:var(--ink);border:1px solid #2f4170;border-radius:10px;padding:8px 12px;font:inherit;cursor:pointer;margin:0 6px 6px 0}
 .btn:hover{border-color:var(--blue)}.btn.pri{background:var(--blue);border-color:var(--blue)}.btn.warn{border-color:#7a4a00;color:#ffd08a}.btn.on{background:#215a3f;border-color:var(--ok)}
 .chk{display:flex;align-items:center;gap:8px;margin:6px 0}
-select,input[type=range]{accent-color:var(--blue)}select{background:#0b1226;color:var(--ink);border:1px solid #2f4170;border-radius:8px;padding:6px}
+select,input[type=range]{accent-color:var(--blue)}select,input[type=text]{background:#0b1226;color:var(--ink);border:1px solid #2f4170;border-radius:8px;padding:6px}
+.grid2{display:grid;grid-template-columns:150px 1fr;gap:8px 12px;align-items:center;max-width:460px}
 .note{font-size:12.5px;color:var(--muted);margin:6px 0 10px}
 .log{font:12px/1.5 ui-monospace,Menlo,monospace;background:#060b18;border:1px solid var(--line);border-radius:10px;padding:8px;height:420px;overflow:auto;white-space:pre-wrap}
+pre.fab{font:12px/1.5 ui-monospace,Menlo,monospace;background:#060b18;border:1px solid var(--line);border-radius:10px;padding:8px;white-space:pre-wrap;max-width:460px}
 iframe{width:100%;height:calc(100vh - 220px);min-height:600px;border:0;border-radius:12px;background:#eef3fb}
 .pill{font-size:12px;padding:2px 8px;border-radius:99px;background:#1d2a4b;color:#c9d6f7}
-.pad{width:200px;height:200px;border-radius:16px;background:#0b1226;border:1px solid #2f4170;position:relative;touch-action:none;cursor:grab}
-.pad i{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:var(--blue);box-shadow:0 0 12px var(--blue);left:50%;top:50%}
-.pad:before,.pad:after{content:"";position:absolute;background:#22314f}.pad:before{left:50%;top:8px;bottom:8px;width:1px}.pad:after{top:50%;left:8px;right:8px;height:1px}
-.row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
 .meter{height:8px;border-radius:8px;background:#1d2948;overflow:hidden;width:220px;margin:6px 0}.meter i{display:block;height:100%;width:0;background:var(--ok)}
 details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top:12px}summary{cursor:pointer;color:#ffd08a}
 </style>
 </head>
 <body>
-<header><h1>TubaBot v2 · Simulador</h1>
-<p>Executa o <b>mesmo núcleo C++</b> do firmware (WebAssembly): tela redonda 466×466, toque, sensores e som. Não é emulação elétrica do ESP32-S3.</p>
+<header><h1>TubaBot v3 · Simulador</h1>
+<p>Executa o <b>mesmo núcleo C++</b> do firmware (WebAssembly) na tela da ES3C28P em <b>paisagem 320×240</b>: toque, microfone, bateria (Pro), som e o perfil de fábrica. Não é emulação elétrica do ESP32-S3.</p>
 <span class="pill" id="buildInfo"></span></header>
 <div class="wrap">
 <div>
   <div class="dev" id="dev">
     <div class="body" id="body">
-      <div class="band"></div><div class="phones l"></div><div class="phones r"></div>
-      <div class="hood"></div><div class="bezel"></div>
-      <canvas id="scr" width="466" height="466" aria-label="Tela de toque do TubaBot"></canvas>
+      <div class="fin"></div><div class="shell"></div><div class="bezel"></div>
+      <canvas id="scr" width="320" height="240" aria-label="Tela de toque do TubaBot (320×240)"></canvas>
+      <div class="badge" id="badge">TubaBot</div>
     </div>
     <div class="btns">
-      <button class="hw" id="bBoot">BOOT</button><button class="hw" id="bBootL">BOOT (segurar 3 s)</button><button class="hw" id="bPwr">PWR</button>
+      <button class="hw" id="bBoot">BOOT</button><button class="hw" id="bBootL">BOOT (segurar 3 s)</button>
     </div>
-    <div class="leds"><span class="led" id="ledS"><i></i>Alto-falante</span><span class="led vib" id="ledV"><i></i>Motor (opcional)</span></div>
+    <div class="leds"><span class="led" id="ledS"><i></i>Alto-falante</span></div>
     <dl class="state" id="state"></dl>
   </div>
 </div>
 <div class="panel">
-  <div class="tabs" id="tabs"><button data-p="ctl" class="on">Controle</button><button data-p="sens">Sensores</button><button data-p="pwr">Energia</button><button data-p="time">Tempo</button><button data-p="fail">Falhas</button><button data-p="portal">Portal</button><button data-p="log">Eventos</button></div>
-  <div class="pane on" id="p-ctl">
+  <div class="tabs" id="tabs"><button data-p="fab" class="on">Fábrica</button><button data-p="ctl">Controle</button><button data-p="sens">Som</button><button data-p="pwr">Energia</button><button data-p="time">Tempo</button><button data-p="fail">Falhas</button><button data-p="portal">Portal</button><button data-p="log">Eventos</button></div>
+  <div class="pane on" id="p-fab">
+    <h3>Perfil de fábrica desta unidade</h3>
+    <p class="note">É o que gravamos na bancada (partição <code>fabrica</code>) antes de entregar cada TubaBot. O usuário não muda o modelo nem a cor física; tema e cor das expressões são só os <b>padrões</b>, que ele personaliza depois.</p>
+    <div class="grid2">
+      <label for="fModel">Modelo</label><select id="fModel"><option value="lite">TubaBot Lite (sem bateria)</option><option value="pro">TubaBot Pro (com bateria)</option></select>
+      <label for="fBody">Cor física</label><select id="fBody"><option value="vermelho">Vermelho</option><option value="azul">Azul</option><option value="branco">Branco</option><option value="grafite">Grafite / preto</option></select>
+      <label for="fExpr">Cor das expressões</label><select id="fExpr"><option value="">igual à cor física</option><option value="vermelho">Vermelho</option><option value="azul">Azul</option><option value="branco">Branco</option><option value="grafite">Grafite</option><option value="ciano">Ciano</option><option value="verde">Verde</option><option value="lilas">Lilás</option><option value="rosa">Rosa</option><option value="amarelo">Amarelo</option><option value="laranja">Laranja</option></select>
+      <label for="fTheme">Tema padrão</label><select id="fTheme"><option value="escuro">Escuro</option><option value="claro">Claro</option></select>
+      <label for="fSerial">Série (opcional)</label><input type="text" id="fSerial" maxlength="23" placeholder="TB-2026-000123">
+    </div>
+    <p style="margin-top:12px"><button class="btn pri" id="fWrite">Gravar perfil e reiniciar como unidade nova</button><button class="btn" id="fKeep">Gravar perfil mantendo os dados</button></p>
+    <p><button class="btn warn" id="fRestore">Restaurar padrão de fábrica (como o usuário faria)</button><button class="btn warn" id="fClear">Apagar perfil (unidade não preparada)</button></p>
+    <h3>Texto gravado (o mesmo do <code>tools/fabrica.py</code>)</h3>
+    <pre class="fab" id="fText"></pre>
+  </div>
+  <div class="pane" id="p-ctl">
     <h3>Como usar</h3>
-    <p class="note">Clique e arraste na tela como num celular. Toque no rosto = "boop"; dois toques = troca expressão; <b>acariciar</b> (arrastar devagar) = carinho; segurar parado 2 s = amor. Deslize para cima = apps, para baixo = ajustes rápidos, para os lados = relógio e "Hoje". Nos apps, deslize para a direita para voltar. Segurar 8 s em qualquer lugar = configuração.</p>
+    <p class="note">Clique e arraste na tela como num celular. Toque no rosto = reação + controles (Pomodoro, Menu, Jogos) que somem sozinhos; dois toques = troca expressão; <b>acariciar</b> (arrastar devagar) = carinho; segurar 2 s = amor. Deslize para cima = menu, para baixo = ajustes rápidos, para os lados = relógio e "Hoje". Nos apps, deslize para a direita para voltar. Segurar 8 s = configuração.</p>
     <h3>Áudio do simulador</h3>
     <label class="chk"><input type="checkbox" id="hear" checked> Ouvir o som (sintetizado pelo núcleo, igual ao alto-falante)</label>
     <h3>Hardware presente</h3>
-    <label class="chk"><input type="checkbox" id="cSpk" checked> Alto-falante (MX1.25)</label>
-    <label class="chk"><input type="checkbox" id="cMot"> Motor de vibração no GPIO16 (MV50, opcional)</label>
-    <label class="chk"><input type="checkbox" id="cBat" checked> Bateria LiPo 3,7 V</label>
+    <label class="chk"><input type="checkbox" id="cSpk" checked> Alto-falante (conector SPEAKER)</label>
+    <label class="chk"><input type="checkbox" id="cMic" checked> Microfone da placa</label>
     <button class="btn" id="applyCaps">Aplicar e reiniciar</button>
     <details><summary>Ferramentas de desenvolvedor</summary>
       <p class="note">Desbloqueios aqui usam um perfil de TESTE que não é gravado.</p>
@@ -88,27 +98,20 @@ details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top
     </details>
   </div>
   <div class="pane" id="p-sens">
-    <h3>Movimento (IMU QMI8658)</h3>
-    <div class="row">
-      <div><div class="pad" id="pad"><i id="padDot"></i></div><p class="note">Arraste para inclinar (os olhos seguem).</p></div>
-      <div>
-        <button class="btn" id="shake">Sacudir</button><br>
-        <button class="btn" id="pick">Pegar no colo</button><br>
-        <button class="btn" id="faceDown">Virar de cara para baixo</button><br>
-        <button class="btn" id="onBack">Deitar (tela para cima)</button><br>
-        <button class="btn" id="upside">De ponta-cabeça</button>
-      </div>
-    </div>
-    <h3>Som ambiente (2 microfones · só o nível chega ao núcleo)</h3>
+    <h3>Som ambiente (microfone · só o nível chega ao núcleo)</h3>
     <label>Nível <input type="range" id="lvl" min="0" max="100" value="30"> <span id="lvlv">30</span></label>
     <div class="meter"><i id="lvlBar"></i></div>
     <button class="btn" id="clap">Palma</button><button class="btn" id="loud">Barulho alto (2 s)</button><button class="btn" id="music">Música (batida 120 bpm)</button>
     <label class="chk"><input type="checkbox" id="realMic"> Usar o microfone do computador (nível apenas, nada é gravado)</label>
   </div>
   <div class="pane" id="p-pwr">
-    <h3>Bateria (AXP2101)</h3>
-    <label>Carga <input type="range" id="bat" min="0" max="100" value="76"> <span id="batv">76%</span></label>
-    <label class="chk"><input type="checkbox" id="chg"> Carregando (USB-C conectado)</label>
+    <div id="pwrPro">
+      <h3>Bateria LiPo (TubaBot Pro)</h3>
+      <label>Carga <input type="range" id="bat" min="0" max="100" value="76"> <span id="batv">76%</span></label>
+      <label class="chk"><input type="checkbox" id="batIn" checked> Bateria conectada</label>
+      <p class="note">A ES3C28P mede a tensão da bateria (ADC); ela não informa se está carregando.</p>
+    </div>
+    <p class="note" id="pwrLite">TubaBot <b>Lite</b>: sem bateria — leitura, aviso e a opção "Mostrar bateria" ficam ocultos. Mude o modelo na aba Fábrica.</p>
   </div>
   <div class="pane" id="p-time">
     <h3>Relógio virtual</h3>
@@ -119,7 +122,7 @@ details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top
     <button class="btn" data-adv="10000">+10 s</button><button class="btn" data-adv="60000">+1 min</button><button class="btn" data-adv="300000">+5 min</button><button class="btn" data-adv="1500000">+25 min</button>
     <h3>Hora civil</h3>
     <button class="btn pri" id="sendTime">Enviar hora do computador</button>
-    <p class="note">A placa tem RTC (PCF85063): a hora é mantida entre reinícios do simulador, como no aparelho.</p>
+    <p class="note">A ES3C28P não tem relógio com bateria: ao religar, a hora volta pela rede de casa (NTP, simulado aqui quando o Wi-Fi de casa está configurado) ou pelo portal.</p>
   </div>
   <div class="pane" id="p-fail">
     <h3>Energia</h3>
@@ -129,7 +132,7 @@ details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top
     <label class="chk"><input type="checkbox" id="wifiBroken"> Wi-Fi de casa indisponível</label>
     <h3>Armazenamento</h3>
     <button class="btn warn" id="corrupt">Corromper preferências e reiniciar</button>
-    <button class="btn warn" id="wipe">Apagar dados do simulador</button>
+    <button class="btn warn" id="wipe">Apagar dados do usuário (mantém o perfil de fábrica)</button>
     <h3>Periféricos</h3>
     <label class="chk"><input type="checkbox" id="scrFail"> Tela sem resposta (o núcleo continua)</label>
     <label class="chk"><input type="checkbox" id="stuck"> Toque preso (controlador relatando toque contínuo)</label>
