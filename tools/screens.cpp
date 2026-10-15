@@ -91,6 +91,6 @@ int main(int argc, char** argv) {
   r.app->gotoScreen(Screen::Settings, r.t); r.run(600); save(*r.app, "ajustes");
   r.app->openConfig(r.t); r.run(600); save(*r.app, "config_qr");
   r.app->gotoScreen(Screen::Info, r.t); r.run(600); save(*r.app, "informacoes");
-  r.app->gotoScreen(Screen::Face, r.t); r.run(25 * 60000, 200); save(*r.app, "alerta_pomodoro");
+  r.app->gotoScreen(Screen::Face, r.t); r.run(25 * 60000, 200); save(*r.app, "alerta");
   return 0;
 }

@@ -1,55 +1,86 @@
-# Roteiro de bancada (quando as peças chegarem)
+# Roteiro de bancada — TubaBot v2
 
-Faça na ordem. Não ligue um módulo cuja tensão/polaridade ainda esteja "a confirmar" antes de medir. Anote os resultados em `docs/VALIDACAO.md` e ajuste `firmware/include/board_profile.h`.
+Faça com a placa **fora do corpo**, sobre a mesa, ligada ao Mac pelo USB-C. Leva uns 20 minutos. Anote o resultado de cada passo; os itens marcados ⚠ são os que o software não pôde confirmar sem a peça.
 
-## 0. Antes de tudo (multímetro)
-- Continuidade dos jumpers e das soldas; nenhum curto entre 3V3, 5V e GND da Super Mini.
-- Com a placa no USB: 5V ≈ 5 V e 3V3 ≈ 3,3 V.
+## 0. Gravar
 
-## 1. Placa sozinha
-1. `pio run -e tubabot_lite -t upload` (Lite primeiro: não aciona buzzer/motor). Se a porta não aparecer, modo BOOT/RESET (README_MAC.md).
-2. `pio device monitor -b 115200`: deve aparecer "TubaBot Lite … OLED AUSENTE (seguindo sem visor)" e a ajuda do console.
-3. `status`: anote **heap livre**; `pio run` já mostrou o **tamanho da imagem** e o uso da partição (1,875 MB).
-4. Desconecte e reconecte o USB 5 vezes: a porta deve voltar sempre.
+Escolha um caminho:
 
-## 2. OLED
-1. Ligue VCC no **3V3**, GND, SDA → GPIO4, SCL → GPIO6.
-2. `i2c`: deve listar 0x3C ou 0x3D e "OLED: ok". Anote o tempo do último envio (µs).
-3. Reinicie: abertura (barbatana → TubaBot → olhos). `oled-teste`: quadrado no canto superior esquerdo; se estiver invertido, use "Girar 180°" no portal. Se a imagem estiver deslocada 2 colunas, recompile com `-DTB_OLED_SH1106=1`.
-4. Puxe o fio SDA com o aparelho ligado e recoloque: o firmware deve continuar rodando e o visor voltar em até ~5 s.
+- **Pelo navegador (sem instalar nada)** — Chrome/Edge: abra <https://espressif.github.io/esptool-js/>, *Connect*, escolha a porta da placa, endereço **0x0**, arquivo `firmware/dist/tubabot-v2.0.0-completo.bin` (ou `tubabot_vibra-…` se ligou o motor), *Program*.
+- **Pelo PlatformIO**: `pio run -e tubabot -t upload` (veja `README_MAC.md`).
 
-## 3. Toque (TTP223)
-1. Meça a saída do TTP223 alimentado em 3,3 V: tocado/solto. Confirme jumpers A (polaridade) e B (momentâneo).
-2. Ligue OUT → GPIO7. `toque` no console: "TOCADO"/"livre" e bordas aumentando.
-3. Teste através do plástico da cabeça na espessura final.
-4. Gestos: toque (troca expressão), duplo (menu), 1 s (carinho), 3 s (amor), 8 s + soltar + toque (configuração).
-5. Segure 25 s: deve aparecer "Sensor preso?" e nada mais.
+Se a porta não aparecer: segure **BOOT**, toque **RESET**/plugue o USB, solte BOOT, e tente de novo.
 
-## 4. Jogos e tempo (ainda no Lite)
-1. Jogue os quatro jogos. Em especial: Pula, Tuba! deve ser fácil de começar e responder na hora; Hora do Bote só aceita o peixe inteiro no quadrado.
-2. Reflexo: compare tempos com o simulador; a diferença indica latência do TTP223 + visor (anote).
-3. Timer de 1 min com o visor apagado (descanso de 30 s): o aviso deve acordar o visor.
-4. Pomodoro curto (1/1 min) pelo portal.
+Abra o monitor serial (115200; no navegador, a própria esptool-js tem *Console*). Digite `ajuda`.
 
-## 5. Buzzer ativo (modelo completo) — medir antes
-1. Sem ligar ao ESP32: alimente o módulo e encoste o pino IN em GND e depois em 3,3 V. Descubra o nível que liga (ALTO ou BAIXO) e a corrente.
-2. Se ligar em BAIXO: compile com `-DTB_BUZZER_ACTIVE_HIGH=0`. Se for PNP e só desligar com 5 V no IN, alimente o módulo em 3,3 V.
-3. Grave `-e tubabot`. Ao ligar não pode haver bipe antes da abertura. Teste silencioso no portal (corta na hora).
+## 1. Barramento e periféricos
 
-## 6. Vibração (MV50) — medir antes
-1. Identifique no módulo: transistor? diodo? Meça a corrente do motor em 3,3 V e 5 V.
-2. Sem driver: **não ligue ao GPIO**; monte transistor + diodo (HARDWARE.md §3.4).
-3. Ligue IN → GPIO10. Carinho deve "ronronar" em pulsos; alertas vibram no máximo ~6 s.
-4. Com o motor vibrando, verifique se o TTP223 dispara toques falsos.
+| Passo | Esperado | Resultado |
+|---|---|---|
+| `i2c` | 0x18, 0x20, 0x34, 0x40, 0x51, 0x5A, 0x6B; linha final com tudo "ok" | |
+| A tela acende com a abertura (mar, nome, olhos) e depois o QR do primeiro uso | imagem nítida, cores corretas, sem faixa deslocada | |
+| `tela-teste` | padrão de teste por alguns segundos; volta sozinho | |
 
-## 7. Rede e portal
-1. Menu → Configurar: conecte o celular em `TubaBot-XXXX` com a senha do visor; abra `http://192.168.4.1` (iPhone e Android). Verifique se o aviso de portal cativo aparece.
-2. Faça o assistente, "Usar offline", troque apelido com acento, envie a hora do celular.
-3. Configure a rede de casa; desligue o roteador: o Tuba segue normal e tenta de novo depois.
-4. Esqueça a rede de casa: apelido/recordes continuam.
+Se as cores saírem trocadas (azul↔vermelho) ou a imagem deslocada alguns pixels, anote e me avise: é ajuste de 1 linha no adaptador da tela.
 
-## 8. Integração e estabilidade
-1. OTA pelo portal com o `.bin` do outro ambiente; depois teste OTA com Pomodoro rodando (deve recusar).
-2. **OTA interrompida** (desligue o USB no meio): deve voltar à versão anterior; se não voltar, grave pelo USB (anote o resultado).
-3. 24 h ligado com timers e lembretes: anote heap mínima (`status`) no começo e no fim.
-4. Perda de energia com Pomodoro rodando: ao religar, "Sessão interrompida" e hora a acertar.
+## 2. Toque ⚠
+
+| Passo | Esperado | Resultado |
+|---|---|---|
+| Encoste no canto **superior esquerdo** e digite `toque` | `TOCANDO em x≈0..60 y≈0..60` | |
+| Canto inferior direito | x≈400..466, y≈400..466 | |
+| Deslize da direita para a esquerda no rosto | abre o próximo cartão (relógio/hoje) | |
+| Toque longo no centro | abre os apps | |
+| Faça carinho (vai-e-vem) | rosto fica feliz, coraçãozinho | |
+
+Se x estiver invertido: compile com `-DTB_TOUCH_MIRROR_X=0` (o mesmo para Y; se x e y estiverem trocados, `-DTB_TOUCH_SWAP_XY=1`). Fica em `firmware/include/board_profile.h`.
+
+## 3. Movimento ⚠
+
+| Passo | Esperado | Resultado |
+|---|---|---|
+| Placa em pé (como ficará no corpo), `imu` | y ≈ +1000, x e z perto de 0 | |
+| Deitada, tela para cima | z ≈ −1000 | |
+| Incline para a esquerda/direita | os olhos acompanham (opção do portal, ligada por padrão) | |
+| Chacoalhe | expressão tonta | |
+| Vire com a tela para baixo | a tela apaga; com alarme tocando, adia (opção do portal) | |
+| App **Nível** | bolha centralizada na mesa | |
+
+Se os eixos não baterem, ajuste `TB_IMU_MAP` (ex.: trocar sinais). Me mande a saída de `imu` nas posições acima que eu calculo o mapeamento.
+
+## 4. Som ⚠
+
+| Passo | Esperado | Resultado |
+|---|---|---|
+| Plugue o alto-falante; `som` | toca o som de abertura; volume confortável | |
+| Ajustes → Volume no mínimo e no máximo | diferença clara; sem chiado/distorção forte | |
+| `som` em silêncio | nível baixo (≈ 10–35) | |
+| `som` batendo palmas perto | nível alto (≈ 60+); palmas no rosto fazem o TubaBot reagir | |
+| Toque uma música perto por 10 s | o TubaBot "dança" (expressão Groovy) | |
+
+## 5. Energia e relógio
+
+| Passo | Esperado | Resultado |
+|---|---|---|
+| **Antes de plugar a bateria**: multímetro no plugue, vermelho no + | tensão positiva 3,6–4,2 V | |
+| Plugue a bateria com USB ligado | ícone de raio; animação de carga | |
+| Desligue o USB | continua ligado; `status` mostra mV e % | |
+| PWR curto | dorme (tela apaga); PWR de novo acorda | |
+| Ajuste a hora (portal ou Wi-Fi), desligue tudo 1 min, ligue | hora mantida pelo RTC | |
+
+## 6. Rede, portal e OTA
+
+| Passo | Esperado | Resultado |
+|---|---|---|
+| Leia o QR da tela com o celular | conecta em `TubaBot-XXXX` e abre `http://192.168.4.1` | |
+| Configure nome, Wi-Fi de casa, cidade | aceita; o TubaBot entra na rede de casa e mostra o clima | |
+| Portal → espelho da tela | imagem atualiza | |
+| Portal → Atualizar firmware com `tubabot-v2.0.0-app-ota.bin` | grava, reinicia, mantém preferências | |
+| `wifi-esquecer` | apaga só a rede; apelido e recordes ficam | |
+| BOOT por 3 s | reabre a rede de configuração | |
+
+## 7. Montado no corpo
+
+Repita rapidamente os passos 2 (toque nas bordas da moldura), 3 (`imu` em pé) e 4 (volume dentro do corpo). Se a tela ficou de cabeça para baixo: Ajustes → Girar 180°.
+
+Mande para mim a tabela preenchida e a saída de `i2c`, `toque`, `imu` e `status`.

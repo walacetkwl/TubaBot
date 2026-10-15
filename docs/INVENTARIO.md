@@ -1,52 +1,42 @@
-# Inventário: referências consultadas, decisões e contradições
+# Inventário v2: referências consultadas, decisões e contradições
 
-## Referências efetivamente analisadas
+## Referências
 
-| Fonte | Versão/acesso | Uso |
+| Fonte | Acesso | Uso |
 |---|---|---|
-| YETI (`imsaar/yeti_claude`) | commit `ce4ccfcc37e9d13fc4488891b68a26164207d51e` (8/4/2026), clonado em 13/10/2026 | inspiração de comportamento; nenhum arquivo, código ou asset copiado |
-| LP `tubalabs.com.br/tubabot/` — `feature-demos.js?v=2.2.0` | lido em 13/10/2026 | intenção de uso dos jogos, Pomodoro, personalidades e política de alertas |
-| Prévia antiga (`…chatgpt.site`) | não acessada (restrita, segundo o briefing) | — |
-| Anúncios do Mercado Livre | não acessados | características marcadas "a confirmar" |
-| Arduino-ESP32 2.0.17 (código-fonte, GitHub) | tag `2.0.17` | verificação de compilação contra as APIs reais |
+| Neo Deskimon — Creative Chance (`creative-chance.com/en-brl/products/neo-deskimon`) | a página não abriu deste ambiente (DNS); informações por buscas e páginas de terceiros, out/2026 | corpo de referência, escolha da placa, ideias de comportamento (rosto expressivo, reações a toque/movimento/som, relógio, clima, carregamento) |
+| Waveshare ESP32-S3-Touch-AMOLED-1.75 — wiki, página do produto, `waveshareteam/ESP32-S3-Touch-AMOLED-1.75` | GitHub, out/2026 | pinos, endereços I²C, deslocamento de coluna do CO5300, versões das bibliotecas |
+| Arduino_GFX `v1.6.4`, SensorLib `v0.3.1`, XPowersLib `v0.2.6` | tags do GitHub | drivers de tela (CO5300), toque/IMU/RTC, PMU |
+| esp-adf / esp-bsp: `es8311` (vendorizado) e `es7210` (porte mínimo) | GitHub | codecs de áudio — Apache-2.0, cabeçalhos de licença preservados em `firmware/src/codec/` |
+| pioarduino `platform-espressif32` 53.03.13 (Arduino-ESP32 3.1.3) | GitHub releases | plataforma do firmware |
+| Nayuki QR Code generator | GitHub | QR na tela — MIT, em `core/third_party/` |
+| Nunito (Google Fonts) | GitHub | fonte do sistema — SIL OFL 1.1, `tools/fonts/OFL.txt`; convertida para 4 bpp por `tools/gen_fonts.py` |
+| Open-Meteo | API pública, sem chave | clima atual e 3 dias |
+| TubaBot v1 (este repositório, commit `58f7b35`) | — | toda a lógica preservada e portada |
 
-Licença da referência: Apache-2.0. Como nada foi copiado (fonte, sprites, sons e textos são do TubaBot; a tabela de fonte 5×7 é o desenho clássico de domínio público, digitado para o projeto), não há avisos de atribuição obrigatórios a preservar. Não há crédito promocional da referência na abertura nem no portal.
+Nenhum arquivo, código, imagem ou som do Neo Deskimon foi copiado: o rosto, os sons (sintetizados), as telas e os textos são do TubaBot. Os STLs do corpo são comprados pelo usuário com a Creative Chance.
 
-## README × código da referência (divergências encontradas)
+## O que mudou da v1 para a v2
 
-- Gestos: o código emite **médio e depois longo na mesma pressão** (os dois disparam ao cruzar os limiares) e o toque simples só sai após 400 ms; o TubaBot classifica de forma exclusiva e decide na soltura.
-- Buzzer: o código usa `ledcWriteTone` (frequências, tema Star Wars) — exige **buzzer passivo**; o TubaBot comprou buzzer **ativo** → padrões liga/desliga.
-- Boot: a referência toca o som de abertura antes de existir preferência de silêncio e pode bloquear na conexão Wi-Fi antes de mostrar o rosto; o TubaBot carrega preferências antes de qualquer saída e nunca espera rede.
-- AP: senha universal fixa (`123456789`) e SSID fixo; o TubaBot usa senha por aparelho e SSID com sufixo do MAC.
-- Pinos: SDA 8 / SCL 9 (strapping no C3) e fallback do toque para GPIO5 (conflita com o buzzer).
+| v1 | v2 | Por quê |
+|---|---|---|
+| ESP32-C3 Super Mini + OLED 128×64 monocromático | ESP32-S3 + AMOLED redondo 466×466 colorido (placa única) | mesma placa do corpo Neo; PSRAM para framebuffer de 434 KB |
+| Sensor TTP223 na cabeça (1 bit) | toque capacitivo na tela (coordenadas) | pedido; habilita deslizar, botões e carinho com direção |
+| Buzzer ativo (liga/desliga) | alto-falante com sintetizador de 2 vozes | melodias, volume, sons por expressão |
+| Sem sensores | IMU, microfones (só nível), bateria, RTC | reações a movimento/som, energia, hora sem Wi-Fi |
+| Fonte bitmap 5×7 | Nunito antisserrilhada em 6 tamanhos | legibilidade na tela grande |
+| 4 jogos | 5 jogos (+ Mergulho, controlado por inclinação) | uso do IMU |
+| — | Hoje, Clima, Alarmes, Respiração, Nível, Sorteio, mostradores, ajustes rápidos | funções no estilo da referência e além |
 
-## Matriz de funcionalidades
+Tudo o que a v1 fazia continua: expressões, carinho/amor, personalidades, desbloqueios, os 4 jogos, Pomodoro, 3 timers, cronômetro, lembretes, política de alertas, portal local com PIN, Wi-Fi de casa opcional, NTP, OTA, backup/restauração (aceita backup da v1), console serial de recuperação.
 
-| Funcionalidade | Origem | Depende de | Decisão | Teste |
-|---|---|---|---|---|
-| Expressões + piscar/olhar | referência, LP | OLED | paramétricas, novas de contexto | telas + `same_inputs_same_frames_deterministic` |
-| Olhos de coração | briefing | OLED | lóbulos + entalhe + ponta | `docs/telas.png` |
-| Carinho/amor | referência, briefing | TTP223 | médio/longo exclusivos, prévia ao segurar | `recovery_hold…`, `persistence…` |
-| Personalidades | LP | — | Tranquilo/Brincalhão mudam ritmo, não recursos | — (comportamental) |
-| Desbloqueios | briefing | NVS | tabela proposta, perfil de teste separado | `dev_unlock_uses_separate_test_profile` |
-| 4 jogos | LP + briefing | TTP223, OLED | regras do briefing; física do salto ajustada | §15 itens 5–9 |
-| Pomodoro/timers/cronômetro/lembretes | LP + briefing | relógio monotônico | 3 timers; checkpoints | §15 itens 10–12 |
-| Política de alertas | LP (`alertPolicy`) + briefing | buzzer ativo, MV50 | central, verificada a cada atualização | `alert_policy_matrix` |
-| Portal local | referência + briefing | Wi-Fi AP | página única na flash, sem CDN | `make e2e` |
-| Relógio por NTP | referência | rede de casa | opcional, desligado | HW |
-| Clima | referência + LP | internet | **não implementado** | — |
-| Mensagem entre TubaBots | ideia antiga | internet | **descartado pelo briefing** | — |
+## Decisões e contradições resolvidas
 
-## Contradições concretas e como foram resolvidas
-
-1. **Buzzer ativo × melodias** (LP sintetiza 660/880/990 Hz; YETI toca Star Wars): o firmware só faz liga/desliga ritmado; o simulador usa um tom fixo e diz isso na tela.
-2. **Sensor de temperatura ausente**: nenhuma tela mostra temperatura; o sensor interno do chip não é usado como "temperatura do cômodo".
-3. **Relógio sem bateria**: hora civil só é válida após ajuste; depois de perder energia aparece "Hora não ajustada". Timers e jogos usam tempo monotônico.
-4. **Física do Pula, Tuba!** (briefing propôs 120/280; pediu "fácil, ágil e responsivo"): adotado 140/400, mantendo os valores do briefing testáveis.
-5. **Toque durante a contagem do No Tempo Certo** (LP demo não trata): ignorado; precisa nova borda depois do VAI.
-6. **Hora do Bote na LP** (peixe em senoide, `fishInside(x) = x-8>=50 && x+6<=78`, aceleração por quadro): substituído por travessia horizontal linear, bounding box completa e aceleração por captura independente de quadros.
-7. **"Duplo toque em alerta"**: reconhece uma vez (sem ação duplicada), conforme o mapa do briefing.
-
-## Pendências de hardware registradas
-
-Ver `docs/HARDWARE.md` §3: controlador e endereço do OLED, jumpers do TTP223, polaridade/transistor do buzzer, driver/corrente do MV50, flash real da Super Mini.
+1. **Toque único para tudo**: o classificador da v1 (decisão exclusiva na soltura) foi mantido e ampliado; gestos de tela não conflitam com carinho (carinho = vai-e-vem curto; deslizar = movimento longo numa direção).
+2. **Acordar sem efeito colateral**: o primeiro toque com a tela apagada só acorda (600 ms de guarda), como a v1 fazia com o TTP223.
+3. **Microfone sem privacidade em risco**: o firmware calcula só o nível (RMS) no próprio chip; nenhuma amostra é guardada, enviada ou exposta na API.
+4. **Clima sem chave e sem servidor próprio**: Open-Meteo direto do aparelho, só quando ligado e com Wi-Fi de casa; cidade escolhida em uma tabela de 27 capitais (ou coordenadas manuais).
+5. **HTTPS do clima sem verificação de certificado** (documentado): os dados são públicos e não sensíveis; evita embarcar e atualizar uma cadeia de certificados.
+6. **Eixos do IMU e espelhamento do toque** foram deduzidos do esquema e dos exemplos, não medidos: ficam como macros em `board_profile.h` e a bancada confirma.
+7. **Arduino-ESP32 3.x**: as bibliotecas da placa exigem o core 3.x; a plataforma oficial do PlatformIO parou no 2.x, por isso o pioarduino com versão fixada.
+8. **Determinismo**: o mesmo núcleo gera framebuffers idênticos bit a bit no nativo e no WebAssembly (`-ffp-contract=off` nos dois).

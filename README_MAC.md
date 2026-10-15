@@ -1,4 +1,4 @@
-# TubaBot no Mac (Apple Silicon ou Intel)
+# TubaBot v2 no Mac (Apple Silicon ou Intel)
 
 ## 1. Pré-requisitos
 
@@ -10,107 +10,113 @@ Opcionais:
 
 | Ferramenta | Para quê | Instalação |
 |---|---|---|
-| PlatformIO | compilar e gravar o firmware | `brew install platformio` (ou `python3 -m pip install --user platformio`) |
-| Node.js 18+ | teste de equivalência nativo×WASM e teste de ponta a ponta | `brew install node` |
+| PlatformIO | compilar e gravar o firmware | `brew install platformio` |
+| Node.js 18+ | equivalência nativo×WASM e teste de ponta a ponta | `brew install node` |
 | LLVM + LLD | **recompilar** o simulador depois de mudar `core/` | `brew install llvm lld` |
+| Pillow | gerar a galeria de telas | `python3 -m pip install --user pillow` |
 
-O clang da Apple não tem o alvo WebAssembly; por isso o simulador já vem com o `.wasm` compilado (`simulator/tubabot_core.wasm.js`). Você só precisa do LLVM do Homebrew se alterar o núcleo.
+O simulador já vem compilado (`simulator/tubabot_core.wasm.js`); o LLVM só é necessário se você alterar o núcleo.
 
-## 2. Simulador (agora, sem as peças)
+## 2. Simulador (sem as peças)
 
 ```bash
 open simulator/index.html
 ```
 
-Funciona com duplo clique, sem servidor e sem internet. Se o navegador bloquear algo em `file://` (Safari às vezes restringe o armazenamento local), use um servidor local:
-
-```bash
-python3 -m http.server 8000
-# abra http://localhost:8000/simulator/
-```
+Funciona com duplo clique, sem servidor e sem internet (exceto o clima, que usa a Open-Meteo de verdade se você ligar). Se o navegador restringir algo em `file://`, use `python3 -m http.server 8000` e abra `http://localhost:8000/simulator/`.
 
 No simulador:
 
-- **Cabeça**: clique/toque e segure, ou use a **barra de espaço**. Segurar reproduz pressão longa; a repetição automática do teclado é ignorada; soltar fora da área, trocar de aba ou perder o foco solta o sensor virtual.
-- **Controle**: modelo Lite/TubaBot (no aparelho real isso vem da gravação), som/silencioso/vibração, áudio do buzzer simulado (tom fixo liga/desliga, como o buzzer ativo comprado). *Ferramentas de desenvolvedor* ficam recolhidas e usam um perfil de teste que não é gravado.
-- **Tempo**: relógio virtual 1×/10×/60×/300× (jogos sempre em 1×), saltos de +10 s a +25 min e "Enviar hora do Mac".
-- **Falhas**: reiniciar, perda de energia, Wi-Fi de casa indisponível, preferências corrompidas, OLED sem resposta, sensor preso, três timers terminando juntos.
+- **Tela redonda**: clique = toque; clique duplo; segure = toque longo; arraste = deslizar; vai-e-vem rápido = carinho. Botões **BOOT**, **BOOT (segurar 3 s)** e **PWR** ao lado, como na placa.
+- **Controle**: alto-falante, motor opcional (GPIO16) e bateria presentes ou não — "Aplicar e reiniciar". *Ferramentas de desenvolvedor* usam um perfil de teste que não é gravado.
+- **Sensores**: arraste para inclinar; sacudir, pegar no colo, virar, deitar, ponta-cabeça; nível de som, palma, barulho, música a 120 bpm, ou o microfone do computador (só o nível; nada é gravado).
+- **Energia**: carga da bateria e USB-C conectado.
+- **Tempo**: relógio virtual 1×/10×/60×/300× (jogos sempre em 1×), saltos e "Enviar hora do computador". A hora é mantida como pelo RTC.
+- **Falhas**: reiniciar, perda de energia, preferências corrompidas, apagar dados, três timers terminando juntos.
 - **Portal**: a mesma página que o ESP32 serve em `192.168.4.1`, falando com o núcleo simulado pela mesma API.
 - **Eventos**: log com horário virtual.
 
-Para recompilar o núcleo do simulador depois de editar `core/`:
+Para testar o portal como no celular: `node tools/portal_server.mjs` (acrescente `--sem-som` para silenciar).
+
+Recompilar o núcleo do simulador depois de editar `core/`:
 
 ```bash
-make sim          # gera simulator/tubabot_core.wasm e .wasm.js
+make sim
 ```
 
 ## 3. Testes
 
 ```bash
-make test         # testes nativos do núcleo (34 testes)
-make crosscheck   # mesmo cenário no nativo e no WebAssembly: framebuffers idênticos (requer node)
-make screens      # gera docs/telas.png com telas reais (requer python3 + Pillow)
-make e2e          # simulador no Chromium via Playwright (requer: npm i -D playwright && npx playwright install chromium)
+make test         # 55 testes nativos do núcleo
+make crosscheck   # nativo × WebAssembly: telas idênticas (requer node)
+make screens      # docs/telas.png com 31 telas reais (requer Pillow)
+make e2e          # simulador e portal no Chromium via Playwright (npm i -D playwright)
 ```
 
-## 4. Firmware (quando as peças chegarem)
+## 4. Gravar o firmware
 
-Ambientes do PlatformIO:
+### 4.1 Pelo navegador (mais fácil)
+
+1. Chrome ou Edge → <https://espressif.github.io/esptool-js/>
+2. Ligue a placa no USB-C, clique **Connect** e escolha a porta (ex.: "USB JTAG/serial debug unit").
+3. Endereço **0x0**, arquivo `firmware/dist/tubabot-v2.0.0-completo.bin` (ou `tubabot_vibra-v2.0.0-completo.bin` se ligou o motor MV50).
+4. **Program**. Ao terminar, aperte RESET ou desplugue e plugue.
+
+### 4.2 Pelo PlatformIO
 
 | Ambiente | Modelo |
 |---|---|
-| `tubabot` | TubaBot (buzzer ativo + vibração) |
-| `tubabot_lite` | TubaBot Lite (só visor e toque; pinos de buzzer/motor nunca são configurados) |
+| `tubabot` | padrão (alto-falante, sem motor) |
+| `tubabot_vibra` | com motor MV50 no GPIO16 |
 
 ```bash
-pio run -e tubabot -e tubabot_lite     # compila os dois (o portal é recompactado antes)
-pio device list                        # descubra a porta (algo como /dev/cu.usbmodem…)
-pio run -e tubabot -t upload --upload-port /dev/cu.usbmodemXXXX
-pio device monitor -b 115200 -p /dev/cu.usbmodemXXXX
+pio run -e tubabot -e tubabot_vibra      # compila (o portal é recompactado antes)
+pio device list                          # descubra a porta (/dev/cu.usbmodem…)
+make flash ENV=tubabot PORT=/dev/cu.usbmodemXXXX
+make monitor PORT=/dev/cu.usbmodemXXXX
+make dist                                # regenera firmware/dist
 ```
 
-Use a porta que **o seu** `pio device list` mostrar; o nome muda de Mac para Mac. Também funciona `ls /dev/cu.*` antes e depois de plugar a placa.
+A primeira compilação baixa a plataforma pioarduino 53.03.13 (Arduino-ESP32 3.1.3) e as bibliotecas fixadas em `platformio.ini`.
 
-Os binários ficam em `.pio/build/<ambiente>/firmware.bin`. O atalho `make flash ENV=tubabot_lite PORT=/dev/cu.usbmodemXXXX` faz o mesmo.
+### 4.3 Atualização pelo portal (OTA)
 
-### Modo de gravação (BOOT/RESET)
+Com o TubaBot já funcionando: portal → **Atualizar firmware** → `firmware/dist/tubabot-v2.0.0-app-ota.bin`. Preferências, recordes e conquistas são mantidos.
 
-Isto é do **chip**, não do firmware TubaBot (funciona mesmo com firmware travado ou apagado):
+### Modo de gravação (BOOT)
 
-1. Segure o botão **BOOT** da Super Mini (GPIO9).
-2. Toque e solte **RESET** (RST/EN).
-3. Solte **BOOT**. A placa entra em modo de download e aparece como porta USB.
-4. Grave com o comando de upload; depois toque **RESET** para rodar.
+Se a porta não aparecer ou a gravação falhar: segure **BOOT**, plugue o USB (ou toque RESET), solte BOOT e grave de novo. Funciona mesmo com firmware travado.
 
-Use quando a porta não aparecer, quando o upload falhar com "No serial data received" ou depois de um firmware que reinicia em laço.
-
-### Console serial de recuperação
-
-Com o monitor aberto (115200), digite e tecle Enter:
+### Console serial de recuperação (115200)
 
 | Comando | Efeito |
 |---|---|
-| `config` | reabre a rede própria do TubaBot (não apaga nada) — use se o toque estiver com defeito |
+| `config` | reabre a rede própria do TubaBot (não apaga nada) |
 | `wifi-esquecer` | apaga só a rede de casa |
-| `i2c` | lista endereços I²C e o estado do OLED (0x3C/0x3D) |
-| `toque` | nível atual do TTP223 e contagem de bordas |
-| `oled-teste` | padrão de teste no visor |
+| `i2c` | lista os dispositivos I²C e o estado de tela, toque, IMU, PMU, RTC, áudio |
+| `toque` | coordenadas do toque atual (conferir orientação) |
+| `imu` | gravidade no referencial da tela (conferir eixos) |
+| `som` | nível do microfone e toca o som de abertura |
+| `tela-teste` | padrão de teste na tela |
 | `status` | estado completo em JSON + memória livre |
 | `reiniciar` | salva e reinicia |
 
+Também sem computador: **BOOT por 3 s** reabre a rede de configuração.
+
 ### Apagar tudo
 
-`pio run -e tubabot -t erase` apaga a flash inteira (inclusive preferências e conquistas). Depois grave de novo.
+`pio run -e tubabot -t erase` (ou *Erase Flash* na esptool-js) apaga a flash inteira, inclusive preferências e conquistas. Depois grave de novo.
 
 ## 5. Solução de problemas
 
 | Sintoma | O que verificar |
 |---|---|
-| Porta USB não aparece | Cabo de **dados** (o Ugreen US287 é de dados), outra porta do Mac, modo BOOT/RESET |
-| Visor preto, serial diz "OLED AUSENTE" | `i2c` no console; VCC/GND/SDA(GPIO4)/SCL(GPIO6); endereço 0x3C/0x3D; módulo alimentado em 3,3 V |
-| Imagem deslocada 2 colunas | controlador SH1106: compile com `-DTB_OLED_SH1106=1` |
-| Toque não responde | `toque` no console; jumper do TTP223 em modo momentâneo; polaridade em `board_profile.h` |
-| Toque "liga e desliga" a cada toque | TTP223 em modo **toggle/retenção** (jumper B): não é defeito de software |
-| Bipe contínuo ao ligar | módulo de buzzer ativo em **nível baixo**: `TB_BUZZER_ACTIVE_HIGH=0` (veja HARDWARE.md) |
-| Celular não abre a página | conecte na rede `TubaBot-XXXX` e digite `http://192.168.4.1` (o aviso "sem internet" é esperado) |
-| Rede de casa não conecta | o TubaBot segue offline e tenta de novo de tempos em tempos; confira nome/senha no portal |
+| Porta USB não aparece | cabo de **dados**, outra porta, modo BOOT |
+| Tela preta | `i2c` no console; brilho em Ajustes; PWR acorda a tela |
+| Toque em lugar errado | `toque`; ajuste `TB_TOUCH_MIRROR_X/Y` / `TB_TOUCH_SWAP_XY` em `board_profile.h` (veja BANCADA.md) |
+| Olhos inclinam para o lado errado / reações de movimento estranhas | `imu`; ajuste `TB_IMU_MAP` |
+| Sem som | alto-falante no conector SPK; Volume e Silencioso em Ajustes; `som` |
+| Não liga só na bateria | polaridade do plugue; bateria com proteção carregada (deixe 1 h no USB) |
+| Tela de cabeça para baixo no corpo | Ajustes → Girar 180° |
+| Celular não abre a página | conecte em `TubaBot-XXXX` e digite `http://192.168.4.1` (o aviso "sem internet" é esperado) |
+| Clima não aparece | Wi-Fi de casa conectado, clima ligado e cidade escolhida no portal |

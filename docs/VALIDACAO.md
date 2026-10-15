@@ -1,71 +1,45 @@
-# Validação — o que foi provado, como, e o que depende das peças
+# Validação v2 — o que foi provado, como, e o que depende das peças
 
-Data: 13/10/2026 · versão do núcleo 0.9.0.
+Data: 15/10/2026 · núcleo 2.0.0.
 
 ## Legenda
 
 - **SIM** — implementado e testado (testes nativos e/ou simulador)
-- **COMP** — compilado para RISC-V rv32imc contra os headers reais do Arduino-ESP32 2.0.17 (verificação, ver limites abaixo)
-- **HW** — pendente de hardware/bancada
-- **NÃO** — não implementado
+- **COMP** — firmware compilado com a plataforma real (pioarduino 53.03.13 / Arduino-ESP32 3.1.3) para o ESP32-S3
+- **HW** — pendente de bancada (peças ainda não recebidas)
 
 ## Resultados reais desta entrega
 
 | Verificação | Comando | Resultado |
 |---|---|---|
-| Testes nativos do núcleo | `make test` | **34 testes, 21.158 verificações, 0 falhas** (também com AddressSanitizer + UBSan: 0 falhas) |
-| Mesmo núcleo no simulador | `make crosscheck` | 10 checkpoints com CRC do framebuffer **idênticos** entre o binário nativo e o WebAssembly do simulador |
-| Simulador e portal no navegador | `make e2e` (Chromium 141 headless) | 17/17 verificações, sem erros de JavaScript e sem nenhum recurso externo |
-| Compilação do firmware | `tools/check_firmware_rv32.sh <arduino-esp32 2.0.17> full|lite` | 16/16 arquivos compilam nos dois modelos; avisos só de headers do framework e nenhum no código do TubaBot |
-| Portal | `tools/embed_portal.py` | 40.051 → 13.393 bytes (gzip); verificação de recursos externos: nenhum |
+| Testes nativos do núcleo | `make test` | **55 testes, 27.137 verificações, 0 falhas** (também com AddressSanitizer + UBSan: 0 falhas) |
+| Mesmo núcleo no simulador | `make crosscheck` | 9 checkpoints com CRC do framebuffer 466×466 **idênticos** entre nativo e WebAssembly |
+| Simulador e portal no navegador | `make e2e` (Chromium headless) | **20/20** verificações (file:// e HTTP, rede própria e rede de casa com PIN), sem erros de JavaScript e sem recurso externo |
+| Firmware `tubabot` e `tubabot_vibra` | `pio run -e tubabot -e tubabot_vibra` | compilam; flash 1.624.484 B (38,7 % da partição de 4 MB), RAM estática 20,9 %; único aviso vem do Arduino_GFX (terceiro) |
+| Imagens prontas | `tools/make_dist.sh` | `firmware/dist/*-completo.bin` (gravar em 0x0) e `*-app-ota.bin` (portal), com `SHA256SUMS.txt` |
+| Portal | `make portal` | 48.127 → 15.538 bytes (gzip), sem CDN |
+| Galeria | `make screens` | 31 telas reais em `docs/telas.png` |
 
-### Limites honestos da compilação
+## Matriz
 
-O registro do PlatformIO e os servidores da Espressif estavam **bloqueados** no ambiente onde o projeto foi escrito (`dl.registry.platformio.org`, `api.registry.platformio.org`, `dl.espressif.com`, `espressif.github.io` → HTTP 403 do proxy). Por isso:
+| Área | Estado | Observação |
+|---|---|---|
+| Rosto, 34 expressões, piscar, olhar, carinho, amor | SIM · COMP | |
+| Gestos na tela (toque, duplo, longo, deslizar ×4, carinho, recuperação) | SIM · COMP · **HW** | orientação do toque a confirmar |
+| Reações a movimento (chacoalhar, pegar, virar, inclinar) | SIM · COMP · **HW** | eixos do IMU a confirmar |
+| Reações a som (palmas, barulho, música/dança) | SIM · COMP · **HW** | ganho do ES7210 a confirmar |
+| Sons e volume | SIM · COMP · **HW** | ganho do ES8311 e alto-falante comprado |
+| Bateria, carregamento, aviso de bateria fraca | SIM · COMP · **HW** | |
+| RTC (hora sem Wi-Fi) | SIM · COMP · **HW** | |
+| 5 jogos, Pomodoro, 3 timers, cronômetro, lembretes, alarmes | SIM · COMP | |
+| Hoje, Clima (Open-Meteo), Respiração, Nível, Sorteio, mostradores | SIM · COMP | clima em rede real: **HW** |
+| Portal, PIN, backup (inclusive da v1), OTA | SIM · COMP · **HW** (OTA real) | |
+| Vibração (MV50 no GPIO16) | SIM · COMP · **HW** | só `tubabot_vibra` |
 
-- **`pio run` não foi executado.** Nenhum `.bin` foi gerado nem é entregue — não há binário fabricado.
-- A verificação usou o código-fonte do **Arduino-ESP32 2.0.17** (clonado do GitHub) com o `riscv64-unknown-elf-g++ 13.2` do Ubuntu, `-march=rv32imc_zicsr_zifencei -mabi=ilp32`, headers genéricos do newlib e da libstdc++ configurada para newlib. Ela prova que o código do TubaBot é aceito pelas APIs reais (WiFi, WebServer, DNSServer, ESPmDNS, Preferences, Update, Wire, esp_timer, esp_ota) e mede o código próprio: **~76 KB de .text** (núcleo ~62 KB + adaptadores ~14 KB). Não prova link, tamanho final da imagem, heap em execução nem compatibilidade com o toolchain `riscv32-esp`.
-- Primeiro passo na bancada: `pio run -e tubabot -e tubabot_lite` no Mac (README_MAC.md) e anotar aqui tamanho da imagem e heap livre (`status` no console).
+## Limites honestos
 
-## Critérios de aceite (seção 15 do briefing)
+- Nenhum teste rodou na placa física: a tela, o toque e os codecs foram configurados conforme os exemplos oficiais da Waveshare, mas só a bancada confirma.
+- O consumo e a autonomia da bateria são estimativas.
+- O simulador reproduz a lógica e o desenho exatamente; a física dos sensores (ruído do IMU, acústica dos microfones) é aproximada.
 
-| # | Critério | Status | Evidência |
-|---|---|---|---|
-| 1 | Mesmo core no simulador e no firmware; framebuffer e regras idênticos | SIM · COMP | `make crosscheck`; o firmware compila os mesmos `core/*.cpp` |
-| 2 | Boot respeita silencioso desde a 1ª saída e funciona sem rede | SIM | `boot_silent_first_output`, `boot_full_plays_and_lite_never`, `first_use_opens_ap_and_offline_option` |
-| 3 | Matriz Lite/completo/som/silencioso/vibração em todos os alertas; corte imediato | SIM | `alert_policy_matrix` (2×2×2×2 × 14 padrões), `alert_cut_immediately_when_disabled`, `lite_api_cannot_enable_hardware` |
-| 4 | Toques simples/duplo/médio/longo, sensor preso, ruído, recuperação sem duplicar | SIM | `gesture_exclusive_classification`, `recovery_hold_8s_opens_config_once`, `screen_off_wake_consumes_gesture` |
-| 5 | Jogo sem atraso de duplo clique e sem repetição ao segurar | SIM | `game_mode_immediate_no_repeat`, `fish_hold_does_not_autocapture_in_app` |
-| 6 | Pula, Tuba!: trajetórias possíveis, espaçamento, pontuação única, buffer, FPS | SIM | `jump_always_possible_many_seeds` (2 conjuntos de física × 40 sementes), `jump_gap_and_trajectory`, `jump_score_once_and_fps_independent`, `jump_buffer_consumed_once` |
-| 7 | Hora do Bote: 100% dentro; 1 px fora rejeita; acelera; nova borda | SIM | `fish_fully_inside_rule`, `fish_capture_speedup_and_miss` |
-| 8 | Reflexo: antecipado inválido; mede após apresentação; início não conta | SIM | `reflex_rules` |
-| 9 | No Tempo Certo: 3,00 e 8,00 possíveis, nunca fora; 3-2-1-VAI; 100%; 7,43/7,50; sem texto arredondado; limite | SIM | `timing_targets_and_formula` (20.000 sorteios), `timing_flow_countdown_and_limit`, `timing_press_held_through_go_does_not_stop` |
-| 10 | Timers/Pomodoro fora da tela; pausar mantém; conclusão única; alerta em jogo justo | SIM | `timers_pomodoro_offscreen_pause_single_completion`, `alert_during_game_pauses_fairly` |
-| 11 | Cronômetro sobe e não tem alarme | SIM | `stopwatch_counts_up_no_alarm` |
-| 12 | Hora civil não altera durações; reboot sem hora não inventa data | SIM | `civil_time_independent_of_durations` |
-| 13 | Preferências/conquistas sobrevivem; esquecer Wi-Fi preserva; reset total | SIM (NVS real: HW) | `persistence_survives_reboot_and_resets`, `corrupted_storage_recovers_defaults`, `power_loss_resume_offer`, `dev_unlock_uses_separate_test_profile` |
-| 14 | Portal offline, sem assets externos, valida erros e acentos, reabre sem roteador | SIM (Wi-Fi real: HW) | `api_auth_validation_and_secrets`, `make e2e` (fases simulador e HTTP, inclusive PIN na rede de casa) |
-| 15 | Build dos dois modelos, flash nas partições, falhas de periférico | COMP · HW | verificação rv32 dos dois modelos; imagem final e partições: HW |
-
-## Funcionalidades por área
-
-| Área | Status |
-|---|---|
-| Abertura (barbatana, TubaBot, olhos, saudação; curta/completa) | SIM |
-| Expressões, coração verdadeiro, piscar/olhar natural, personalidade, carinho | SIM (aparência no OLED real: HW) |
-| Coleção e desbloqueios | SIM |
-| 4 jogos | SIM (sensação de toque e latência real: HW) |
-| Pomodoro, 3 timers, cronômetro, lembretes, retomada após queda | SIM |
-| Política central de som/vibração | SIM · COMP (níveis/polaridades: HW) |
-| Portal (assistente, abas, backup/importação, reset em 3 níveis, diagnóstico) | SIM |
-| Rede própria (AP com senha por aparelho, DNS cativo, mDNS), rede de casa opcional com tentativas espaçadas | COMP · HW |
-| OTA local (token, recusa com tarefa ativa, magic/chip/tamanho, progresso no visor) | COMP · HW (queda de energia durante OTA: não validada) |
-| Console serial de recuperação | COMP · HW |
-| Driver OLED (0x3C/0x3D, páginas alteradas, recuperação do barramento, SH1106 opcional) | COMP · HW |
-| Toque por interrupção com timestamp | COMP · HW |
-| NTP opcional (desligado por padrão) | COMP · HW |
-| Clima/previsão | NÃO (ver FUNCIONALIDADES.md §8) |
-
-## Testes físicos pendentes
-
-Veja `docs/BANCADA.md`. Resumo: OLED real e endereço; toque através do plástico e tempo de resposta; polaridades e tensões dos módulos; corrente do MV50; toques falsos com vibração; alimentação e reconexão USB; AP/captive portal em iPhone e Android; funcionamento contínuo (24 h); OTA interrompida; heap mínima ao longo do tempo; custo do envio I²C por quadro.
+Roteiro de bancada: [`BANCADA.md`](BANCADA.md).

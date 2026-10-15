@@ -1,78 +1,82 @@
-# Hardware do TubaBot — compras, ligação provisória e pendências
+# Hardware do TubaBot v2 — placa, corpo, ligações e montagem
 
-> **Mapa PROVISÓRIO.** Os anúncios do Mercado Livre não puderam ser abertos durante a preparação do briefing nem nesta implementação. Tudo marcado "a confirmar no módulo recebido" deve ser medido na bancada antes de ligar o módulo ao ESP32. Todos os pinos e polaridades estão centralizados em `firmware/include/board_profile.h`.
+O TubaBot v2 troca o conjunto da v1 (ESP32-C3 + OLED 0,96" + TTP223 + buzzer) por **uma única placa pronta**, a mesma usada pelo corpo de referência (Neo Deskimon, da Creative Chance):
 
-## 1. Itens comprados (11 links)
+**Waveshare ESP32-S3-Touch-AMOLED-1.75** — SKU 31261 (sem GPS) · página oficial: <https://www.waveshare.com/esp32-s3-touch-amoled-1.75.htm>
 
-| Item | Papel | Link |
+> Atenção na compra: a Waveshare vende três versões desta placa — **31261** (padrão, a que o corpo Neo usa), **31262** ("-B", com case próprio) e **31264** ("-G", com GPS). Existe ainda a **1.75C**, um modelo diferente com caixa de alumínio. O firmware serve nas versões 31261, 31262 e 31264 (mesmos periféricos; a 1.75C não foi verificada), mas **compre a 31261 "pelada"** para caber no corpo. Confira a foto do anúncio: tela redonda com moldura preta, placa atrás com USB-C, dois botões laterais (BOOT e PWR), slot microSD e conectores MX1.25 para bateria e alto-falante.
+
+A lista de compras completa, com links do Mercado Livre e da Shopee, está em [`lista_de_materiais.xlsx`](lista_de_materiais.xlsx).
+
+## 1. O que vem na placa (e o que o TubaBot usa)
+
+| Bloco | Componente | Endereço / pinos | Uso no TubaBot v2 |
+|---|---|---|---|
+| Processador | ESP32-S3R8, 240 MHz, 2 núcleos, **8 MB PSRAM** octal, **16 MB flash** | — | tudo; framebuffer 466×466 na PSRAM |
+| Tela | AMOLED 1,75" **466×466**, controlador **CO5300** (QSPI) | CS 12, SCLK 38, D0–D3 4/5/6/7, RST 39, TE 13 | rosto colorido, relógio, apps |
+| Toque | **CST9217** capacitivo (substitui o TTP223 da cabeça) | I²C 0x5A, INT 11, RST 40 | todos os gestos: toque, duplo, longo, deslizar, carinho |
+| Movimento | **QMI8658** acelerômetro + giroscópio | I²C 0x6B, INT2 21 | chacoalhar, pegar no colo, virar de cara, nível, olhar inclinado |
+| Energia | **AXP2101** PMU + carregador de LiPo | I²C 0x34 | % da bateria, carregando, USB presente |
+| Relógio | **PCF85063** RTC | I²C 0x51 | hora mantida sem Wi-Fi (com bateria) |
+| Alto-falante | **ES8311** codec + amplificador **NS4150B** | I²C 0x18, PA GPIO46, I²S MCLK 42 BCLK 9 WS 45 DOUT 8 | sons sintetizados (16 kHz) |
+| Microfones | **ES7210** ADC, 2 microfones | I²C 0x40, I²S DIN 10 | nível de som: palmas, barulho, música (sem gravar voz) |
+| Expansor | **TCA9554** | I²C 0x20 (P4 = botão PWR) | botão PWR |
+| Botões | BOOT (GPIO0) e PWR | — | BOOT curto = acordar/voltar; BOOT 3 s = rede de configuração; PWR = dormir/acordar |
+| Barramento | I²C SDA **15**, SCL **14**, 400 kHz | — | compartilhado por todos acima |
+
+Todos os pinos e polaridades ficam em **um só lugar**: [`firmware/include/board_profile.h`](../firmware/include/board_profile.h). Fonte: o `HARDWARE_REFERENCE.md` e os exemplos do repositório oficial `waveshareteam/ESP32-S3-Touch-AMOLED-1.75`.
+
+## 2. O que você conecta
+
+| Item | Conector na placa | Cuidados |
 |---|---|---|
-| ESP32-C3 Super Mini, Wi-Fi/Bluetooth, USB-C, com solda | Controlador | https://produto.mercadolivre.com.br/MLB-7631225428-placa-esp32-c3-super-mini-wifi-bluetooth-usb-c-com-solda-_JM?quantity=1&sid=purchases |
-| Multímetro Kapbom DT-9205A | Ferramenta de bancada | https://www.mercadolivre.com.br/multimetro-digital-kapbom-dt-9205a-com-capacimetro-e-bipe-sonoro/p/MLB27119761?pdp_filters=item_id:MLB4868916925&sid=purchases |
-| Barra de pinos macho 1×40, 2,54 mm (10 un.) | Conexões | https://www.mercadolivre.com.br/barra-de-pinos-macho-1x40-vias-254mm-180-10-pecas/p/MLB42966772?pdp_filters=item_id:MLB5411364604&sid=purchases |
-| Módulo de vibração motor DC PWM MV50 | Vibração (modelo completo) | https://www.mercadolivre.com.br/modulo-de-vibracao-motor-dc-pwm-mv50-para-arduino/p/MLB44762532?pdp_filters=item_id:MLB5222231244&sid=purchases |
-| Kit ferro de solda 60 W e estanho | Ferramenta | https://produto.mercadolivre.com.br/MLB-1962565547-kit-ferro-de-solda-soldar-soldador-60w-estanho-tubo-_JM?quantity=1&variation_id=92480959303&sid=purchases |
-| Cabo Ugreen US287 USB 2.0 → USB-C, 1,5 m | Alimentação, gravação, serial | https://www.mercadolivre.com.br/cabo-de-dados-ugreen-us287-usb-20-p-usb-tipo-c-15m-preto/p/MLB19951731?pdp_filters=item_id:MLB4975518187&sid=purchases |
-| Módulo buzzer **ativo** | Bipes rítmicos (modelo completo) | https://www.mercadolivre.com.br/modulo-buzzer-ativo-p-arduino/p/MLB2064185857?pdp_filters=item_id:MLB6523999990&sid=purchases |
-| Jumpers fêmea-fêmea 10 cm (40 un.) | Cabeamento | https://www.mercadolivre.com.br/cabo-jumper-10cm-femea-x-femea-40-unid-picarduino/p/MLB35714102?pdp_filters=item_id:MLB3668056791&sid=purchases |
-| Kit 10 sensores capacitivos TTP223 | **Um** sensor por robô (cabeça) | https://www.mercadolivre.com.br/10x-teclado-sensor-touch-toque-capacitivo-ttp223-arduino/p/MLB2050795406?pdp_filters=item_id:MLB3339935349&sid=purchases |
-| OLED branco 0,96" I²C 128×64 | Visor (SSD1306 presumido) | https://www.mercadolivre.com.br/display-oled-096-branco-grafico-i2c-128x64-arduino/up/MLBU749499347?pdp_filters=item_id:MLB2653122128&sid=purchases |
-| Ímãs de neodímio 8×2 mm N35 (20 un.) | Mecânica, sem função eletrônica | https://www.mercadolivre.com.br/ima-neodimio-8x2mm-20-unidades-disco-n35/p/MLB72729571?pdp_filters=item_id:MLB4744742039&sid=purchases |
+| Bateria LiPo 3,7 V **803040 1000 mAh** (cabe no corpo Neo) | **MX1.25 2 pinos** "BAT" | **Confira a polaridade antes de plugar.** Baterias de anúncio vêm com fios em ordem diferente; o vermelho tem de ir no `+` serigrafado na placa. Se estiver invertido, troque os pinos do plugue com uma agulha (levante a trava). Exija bateria **com circuito de proteção (PCM)**. Uma bateria até ~1200 mAh com até 8 × 30 × 40 mm entra. |
+| Alto-falante **8 Ω, 1–2 W**, ~28 mm (ou cápsula retangular 2030/2835) | **MX1.25 2 pinos** "SPK" | Sem polaridade crítica. Se vier com outro plugue (PH2.0, JST), corte e solde um rabicho MX1.25. |
+| Motor de vibração MV50 (opcional, **da v1**) | Barra de expansão: **GPIO16**, 3V3, GND | Só no firmware `tubabot_vibra`. O MV50 tem transistor próprio; ligue IN→GPIO16, VCC→3V3, GND→GND. |
+| Cabo USB-C de **dados** (o Ugreen da v1 serve) | USB-C | Alimenta, carrega a bateria e grava o firmware. |
 
-Não há microfone, alto-falante, câmera, acelerômetro, sensor de temperatura ambiente, bateria nem RTC com bateria — o software não promete nada que dependa deles.
+> **MX1.25 ≠ PH2.0 ≠ JST-SH 1.0.** São parecidos e não encaixam entre si. O kit de rabichos MX1.25 2 pinos da lista resolve qualquer diferença.
 
-## 2. Mapa de pinos compilado (provisório)
+Não é preciso soldar nada na placa para o uso básico. O ferro de solda da v1 só entra se precisar adaptar plugue da bateria/alto-falante ou ligar o motor.
 
-| Sinal | GPIO | Alimentação do módulo | Nível lógico do sinal | Polaridade compilada | Status |
-|---|---|---|---|---|---|
-| OLED SDA | **4** | 3,3 V (pino 3V3) | 3,3 V (pull-ups do módulo) | — | a confirmar |
-| OLED SCL | **6** | 3,3 V | 3,3 V | — | a confirmar |
-| TTP223 OUT | **7** | 3,3 V | 3,3 V (saída push-pull do TTP223) | ativo em ALTO | a confirmar (jumpers A/B) |
-| Buzzer ativo IN | **5** | ver §3.3 | 3,3 V do GPIO | ativo em ALTO | **crítico confirmar** |
-| MV50 IN | **10** | ver §3.4 | 3,3 V do GPIO | ativo em ALTO | **crítico confirmar** |
-| USB D−/D+ | 18/19 | — | — | — | reservado (USB nativo) |
+## 3. Corpo (Neo Deskimon)
 
-Por que este mapa:
+- Arquivos 3D do corpo **Neo** (capuz com fones de ouvido) vendidos pela Creative Chance no Thangs (~US$ 8). Imprimir em **PLA** (0,2 mm, 15–20 % de preenchimento, suporte só onde o fatiador indicar — normalmente na abertura da tela e nos fones).
+- Sem impressora: serviços de impressão 3D sob encomenda no Mercado Livre/Shopee (envie o STL; peça PLA, a cor que quiser).
+- O corpo foi feito para a placa 1.75 com bateria 803040 e alto-falante pequeno atrás da tela. Os ímãs de neodímio 8×2 mm da v1 podem fixar a tampa traseira (cole com cianoacrilato nos furos, se o modelo prever) — opcional.
 
-- A referência (YETI) usa **SDA 8 / SCL 9**. No ESP32-C3, GPIO2, GPIO8 e GPIO9 são *strapping pins* (definem o modo de boot); na Super Mini, GPIO8 ainda tem o LED azul e GPIO9 é o botão BOOT. Um pull-up/pull-down errado no barramento I²C nesses pinos pode impedir o boot normal. Por isso o mapa usa 4/6.
-- GPIO18/19 são o USB nativo (gravação e serial). GPIO20/21 ficam livres para a UART de depuração.
-- GPIO4–7 também são os pinos de JTAG por pads; por padrão o C3 usa JTAG via USB e eles funcionam como GPIO comum — confirmar que nenhum módulo pisca/bipa no reset.
-- O "fallback" do touch para GPIO5 da referência **não** foi aplicado: GPIO5 é do buzzer.
+### Montagem sugerida
 
-**Nunca aplique 5 V em um GPIO do ESP32-C3.** Alimente OLED e TTP223 em **3,3 V**, para que os pull-ups do I²C e a saída do TTP223 fiquem em 3,3 V.
+1. **Antes de montar**, grave o firmware e rode o roteiro de [`BANCADA.md`](BANCADA.md) com a placa solta (tela, toque, sensores, som, bateria).
+2. Plugue o alto-falante (SPK) e a bateria (BAT, **polaridade conferida**). Prenda a bateria com fita dupla-face fina no fundo do corpo, longe de parafusos e cantos vivos.
+3. Encaixe a placa pela frente, tela para fora, USB-C alinhado com a abertura do corpo e os dois botões alinhados aos furos laterais.
+4. Passe os fios sem esmagar contra a placa. O alto-falante vai na cavidade com furos (os "fones").
+5. Feche a tampa traseira. Ligue com PWR (ou plugando o USB-C).
+6. Se o corpo deixar a tela de cabeça para baixo, ative **Ajustes → Girar 180°** (gira imagem e toque juntos).
 
-## 3. Pendências por módulo (medir antes de ligar)
+## 4. Peças da v1 que continuam úteis
 
-### 3.1 OLED 0,96"
-- [ ] Controlador: SSD1306 (presumido) ou SH1106? Se a imagem sair deslocada 2 colunas, compilar com `-DTB_OLED_SH1106=1`.
-- [ ] Endereço: o firmware testa 0x3C e 0x3D (`i2c` no console).
-- [ ] Faixa de VCC do módulo (muitos têm regulador e aceitam 3,3–5 V) — usar 3,3 V.
-- [ ] Orientação na carcaça: ajuste "Girar 180°" no portal.
-- [ ] Custo real de envio ao I²C a 400 kHz (`i2c` mostra o último envio em µs). Estimativa teórica: ~23 ms para a tela inteira; o driver envia só as páginas alteradas.
+| Peça da v1 | Na v2 |
+|---|---|
+| Cabo Ugreen USB-C | sim — alimentação/gravação |
+| MV50 + jumpers fêmea-fêmea | sim — vibração opcional no GPIO16 |
+| Multímetro | sim — conferir polaridade da bateria |
+| Ferro de solda + estanho | só se precisar adaptar plugues |
+| Ímãs 8×2 mm | opcional, fecho da tampa |
+| ESP32-C3, OLED, TTP223, buzzer ativo, barra de pinos | não são usados (a v1 continua funcionando com eles) |
 
-### 3.2 TTP223
-- [ ] Jumper **A**: aberto = saída ALTA ao tocar (padrão compilado). Fechado = ativa em BAIXO → `TB_TOUCH_ACTIVE_HIGH=0`.
-- [ ] Jumper **B**: aberto = momentâneo (necessário). Fechado = toggle/retenção — o toque "trava" ligado; isso **não é defeito de software**.
-- [ ] Sensibilidade através do plástico da cabeça (espessura da parede).
-- [ ] Tempo de resposta do módulo (ver roteiro de bancada).
+## 5. Energia
 
-### 3.3 Buzzer ativo
-- [ ] Tensão de trabalho (comum: 3,3–5 V).
-- [ ] Existe transistor no módulo? NPN → ativo em ALTO; **PNP → ativo em BAIXO** (muito comum em módulos "low level trigger").
-- [ ] **Atenção:** módulo com PNP alimentado em 5 V e comandado por GPIO de 3,3 V pode ficar **sempre ligado** (o 3,3 V não corta o PNP). Nesse caso alimente o módulo em 3,3 V ou use outro estágio.
-- [ ] O buzzer é ATIVO: o firmware só liga/desliga em padrões rítmicos. Não há melodias, voz, volume ou "ronronar" sonoro realista.
+- Consumo estimado (tela AMOLED tem consumo proporcional ao brilho e aos pixels acesos; o rosto é majoritariamente preto): ~90–150 mA ativo com Wi-Fi, menos com brilho baixo; tela apagada no modo dormir.
+- 1000 mAh ≈ 6–10 h de uso contínuo, mais com "Brilho reduzido à noite" e virando o TubaBot de tela para baixo (apaga a tela). **Valores estimados — medir na bancada** (o `status` mostra mV e % lidos do AXP2101).
+- O carregamento é feito pelo AXP2101 quando o USB-C está ligado; o TubaBot mostra o raio na bateria e uma animação ao plugar.
 
-### 3.4 MV50 (vibração)
-- [ ] O módulo tem transistor de acionamento **e** diodo de roda-livre? (anúncio não confirmado)
-- [ ] Tensão e corrente do motor (meça com o multímetro em série). Motores desse tipo costumam puxar dezenas de mA — mais do que um GPIO deve fornecer.
-- [ ] Polaridade do sinal IN (ativo em ALTO compilado).
-- [ ] Se o módulo for apenas o motor (sem driver): **não ligue ao GPIO**. Itens adicionais necessários (não comprados): transistor NPN (ex.: S8050/2N2222) ou MOSFET de nível lógico, resistor de base ~1 kΩ, diodo 1N4148/1N5819 em antiparalelo com o motor, e alimentação do motor pelo pino 5V da placa.
-- [ ] Vibração gerando toques falsos no TTP223 (testar com o motor ligado).
+## 6. Pontos a confirmar na bancada
 
-### 3.5 ESP32-C3 Super Mini
-- [ ] Flash real (o projeto assume **4 MB**, sem PSRAM): `pio run -t upload` mostra o tamanho detectado; o portal mostra a memória livre.
-- [ ] LED onboard no GPIO8 (não usado pelo firmware).
-- [ ] Botões BOOT (GPIO9) e RESET.
-
-## 4. Partições (4 MB)
-
-`firmware/partitions_tubabot.csv`: NVS 20 KB, otadata 8 KB, **duas apps de 1,875 MB** (OTA), coredump 64 KB. O tamanho do binário real só será conhecido no primeiro `pio run`; a verificação de compilação desta entrega mediu ~76 KB de código próprio (núcleo + adaptadores), sem contar o framework (Wi-Fi/HTTP), que tipicamente ocupa a maior parte de uma imagem de ~0,9–1,1 MB nesta plataforma (estimativa, não medida aqui).
+| Item | Por quê | Como conferir | Onde ajustar |
+|---|---|---|---|
+| Orientação do toque | o CST9217 pode vir espelhado em relação à imagem | comando `toque`: canto superior esquerdo ≈ (0,0) | `TB_TOUCH_MIRROR_X/Y`, `TB_TOUCH_SWAP_XY` |
+| Eixos do IMU | o mapeamento foi deduzido do esquema, não medido | comando `imu`: em pé y≈+1000; deitado com a tela para cima z≈−1000 | `TB_IMU_MAP` |
+| Volume do alto-falante | depende do alto-falante comprado | Ajustes → Volume; comando `som` | ganho do ES8311 em `hw.cpp` |
+| Sensibilidade dos microfones | idem | comando `som` com palmas | ganho do ES7210 em `hw.cpp` (30 dB) |
+| Polaridade da bateria | depende do anúncio | multímetro antes de plugar | — |
