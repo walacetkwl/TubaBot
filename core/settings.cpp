@@ -105,7 +105,7 @@ void defaultSettings(Settings& s) {
   s.jumpEasy = 1;
   s.apTimeoutMin = 15;
   s.weatherEnabled = 0;
-  s.ntpEnabled = 0;
+  s.ntpEnabled = 1;   // sem RTC na ES3C28P: a hora vem da rede de casa quando houver
   s.volume = 60;
   s.eyeColor = 3;
   s.eyeGlow = 1;

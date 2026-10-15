@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <Update.h>
 #include <esp_ota_ops.h>
+#include <esp_partition.h>
 #include <time.h>
 #include "board_profile.h"
 #include <HTTPClient.h>
@@ -166,8 +167,27 @@ void EspPlatform::sysInfo(SysInfo& s) {
   snprintf(s.build, sizeof s.build, "%s %s", TB_ENV_NAME, __DATE__);
 }
 
-void EspPlatform::applyDisplay(uint8_t b, bool r) { if (screen_) screen_->setBrightness(b); rotate_ = r; }
-void EspPlatform::rtcWrite(int64_t epoch) { if (sensors_) sensors_->rtcWrite(epoch); }
+void EspPlatform::applyDisplay(uint8_t b, bool r) { if (screen_) { screen_->setFlipped(r); screen_->setBrightness(b); } rotate_ = r; }
+
+// ── perfil de fábrica (partição "fabrica", 4 KB, ver tools/fabrica.py) ──────
+static const esp_partition_t* factoryPart() {
+  return esp_partition_find_first(ESP_PARTITION_TYPE_DATA, (esp_partition_subtype_t)TB_FACTORY_PART_SUBTYPE, TB_FACTORY_PART_NAME);
+}
+bool EspPlatform::factoryLoad(char* buf, size_t cap, size_t* len) {
+  *len = 0;
+  const esp_partition_t* p = factoryPart();
+  if (!p) return false;
+  size_t n = cap < p->size ? cap : p->size;
+  if (esp_partition_read(p, 0, buf, n) != ESP_OK) return false;
+  *len = n;
+  return true;
+}
+bool EspPlatform::factoryWrite(const char* text, size_t len) {
+  const esp_partition_t* p = factoryPart();
+  if (!p || len > p->size) return false;
+  if (esp_partition_erase_range(p, 0, p->size) != ESP_OK) return false;
+  return esp_partition_write(p, 0, text, len) == ESP_OK;
+}
 void EspPlatform::setTimezone(const char* posix) { setenv("TZ", posix, 1); tzset(); }
 void EspPlatform::log(const char* msg) { Serial.printf("[%8lu] %s\n", (unsigned long)millis(), msg); }
 
@@ -235,7 +255,7 @@ void EspPlatform::handleUpdateChunk() {
     otaWritten_ += up.currentSize;
     // a requisição é tratada de forma síncrona: atualiza o visor daqui mesmo
     app_->otaProgress((int)(otaWritten_ * 1000 / (otaTotal_ ? otaTotal_ : 1)));
-    if (app_->tick(nowMs()) && screen_) screen_->push(app_->canvas().pixels(), app_->dirty(), rotate_);
+    if (app_->tick(nowMs()) && screen_) screen_->push(app_->canvas().pixels(), app_->dirty());
   } else if (up.status == UPLOAD_FILE_END && otaActive_ && !otaErr_[0]) {
     if (otaWritten_ != otaTotal_) { strlcpy(otaErr_, "tamanho recebido diferente do anunciado", sizeof otaErr_); Update.abort(); }
     else if (!Update.end(true)) strlcpy(otaErr_, Update.errorString(), sizeof otaErr_);

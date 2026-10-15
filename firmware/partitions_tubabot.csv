@@ -1,9 +1,12 @@
-# TubaBot v2 — 16 MB de flash (ESP32-S3R8 da Waveshare AMOLED 1.75)
+# TubaBot v3 — 16 MB de flash (ESP32-S3 da ES3C28P)
 # Offsets padrão do Arduino-ESP32 (bootloader 0x0, tabela 0x8000, otadata 0xe000, app 0x10000).
+# "fabrica" (4 KB) guarda o perfil da unidade (Lite/Pro, cor, padrões). Fica no FIM da
+# flash para não ser apagada ao regravar o firmware completo (que vai só até ~2 MB).
 # Name,   Type, SubType, Offset,   Size
 nvs,      data, nvs,     0x9000,   0x5000
 otadata,  data, ota,     0xe000,   0x2000
 app0,     app,  ota_0,   0x10000,  0x400000
 app1,     app,  ota_1,   0x410000, 0x400000
-spiffs,   data, spiffs,  0x810000, 0x7E0000
+spiffs,   data, spiffs,  0x810000, 0x7DF000
+fabrica,  data, 0x40,    0xFEF000, 0x1000
 coredump, data, coredump,0xFF0000, 0x10000

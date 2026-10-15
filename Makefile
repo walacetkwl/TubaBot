@@ -1,10 +1,10 @@
-# TubaBot v2 — atalhos (macOS e Linux). Veja README_MAC.md.
+# TubaBot v3 — atalhos (macOS e Linux). Veja README_MAC.md.
 CXX ?= c++
 CXXFLAGS = -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter -ffp-contract=off -Icore
 CORE = $(wildcard core/*.cpp)
 BUILD = build
 
-.PHONY: test sim simulador screens crosscheck e2e firmware vibra dist flash monitor portal fonts clean
+.PHONY: test sim simulador screens crosscheck e2e firmware dist flash monitor portal fonts fabrica clean
 
 ## Testes nativos do núcleo (Apple clang ou g++)
 test: $(BUILD)/tests
@@ -54,10 +54,11 @@ portal:
 ## Firmware (PlatformIO + pioarduino / Arduino-ESP32 3.1.3)
 firmware:
 	pio run -e tubabot
-vibra:
-	pio run -e tubabot_vibra
+## Perfis de fábrica padrão (Lite/Pro × 4 cores) em firmware/fabrica/
+fabrica:
+	python3 tools/fabrica.py --todos
 ## Binários prontos em firmware/dist (completo = gravar no endereço 0x0; app-ota = atualizar pelo portal)
-dist: firmware vibra
+dist: firmware
 	./tools/make_dist.sh
 flash:
 	pio run -e $(or $(ENV),tubabot) -t upload $(if $(PORT),--upload-port $(PORT),)

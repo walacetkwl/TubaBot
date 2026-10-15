@@ -1178,6 +1178,20 @@ TEST(factory_profile_format_parse_and_crc) {
   CHECK_EQ(bodyFromKey("preto"), 3); CHECK_EQ(exprColorFromKey("grafite"), 3);
 }
 
+// Texto gerado por tools/fabrica.py (--modelo pro --cor vermelho --tema claro --serie TB-0001):
+// garante que a ferramenta em Python e o firmware falam o mesmo formato/CRC.
+TEST(factory_profile_from_python_tool) {
+  const char* t =
+    "TUBABOT-FABRICA 1\nmodelo=pro\ncor=vermelho\nexpressao=vermelho\ntema=claro\nvolume=60\nbrilho=80\n"
+    "personalidade=tranquilo\nmostrar_hora=0\nmostrar_clima=0\nmostrar_bateria=0\nformato_24h=1\n"
+    "fuso=America/Sao_Paulo\nserie=TB-0001\ncrc=E7293584\n";
+  FactoryConfig f; const char* why = nullptr;
+  CHECK(parseFactory(t, strlen(t), f, &why)); CHECK(why == nullptr);
+  CHECK(f.model == Model::Pro); CHECK_EQ(f.body, 0); CHECK_EQ(f.theme, 1); CHECK(strcmp(f.serial, "TB-0001") == 0);
+  char again[FACTORY_MAX]; size_t n = formatFactory(f, again, sizeof again);
+  CHECK(n == strlen(t) && memcmp(again, t, n) == 0);   // mesmo texto, byte a byte
+}
+
 TEST(factory_defaults_first_boot_and_restore) {
   H h(fullCaps(), false);
   h.plat.setFactory(Model::Pro, 0, 1);  // vermelho, tema claro

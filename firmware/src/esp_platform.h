@@ -1,7 +1,7 @@
-// Implementação da porta tb::Platform para o ESP32-S3 (TubaBot v2):
-// NVS (Preferences), rede própria (AP + DNS cativo + mDNS), rede de casa opcional,
-// servidor HTTP com o portal e a API compartilhada, OTA local, NTP opcional,
-// RTC com bateria e clima (HTTPS numa tarefa separada, sem travar a tela).
+// Implementação da porta tb::Platform para o ESP32-S3 da ES3C28P (TubaBot v3):
+// NVS (Preferences), perfil de fábrica (partição própria), rede própria (AP + DNS
+// cativo + mDNS), rede de casa opcional, servidor HTTP com o portal e a API
+// compartilhada, OTA local, NTP opcional e clima (HTTPS numa tarefa separada).
 #pragma once
 #include <Arduino.h>
 #include "app.h"
@@ -25,7 +25,8 @@ class EspPlatform : public tb::Platform {
   void sysInfo(tb::SysInfo& s) override;
   void requestReboot() override { rebootAt_ = millis() + 400; }
   void applyDisplay(uint8_t brightness, bool rotate180) override;
-  void rtcWrite(int64_t epoch) override;
+  bool factoryLoad(char* buf, size_t cap, size_t* len) override;
+  bool factoryWrite(const char* text, size_t len);   // usado pelo comando serial "fabrica-gravar"
   bool rotate180() const { return rotate_; }
   void setTimezone(const char* posix) override;
   bool busy() override { return otaActive_ || saving_; }
