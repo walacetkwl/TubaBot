@@ -37,32 +37,34 @@ await fr.locator('#wDone').click();
 await page.waitForTimeout(800);
 ok((await state()).includes('face'), 'assistente do portal conclui o primeiro uso (rosto)');
 await page.screenshot({ path: `${out}/02_portal.png` });
-// Gestos na cabeça: segurar 1,2 s = carinho
+// Toque na tela redonda (mouse = dedo)
 await page.click('.tabs button[data-p=log]');
-const head = page.locator('#head');
-const box = await head.boundingBox();
-await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-await page.mouse.down(); await page.waitForTimeout(1300); await page.mouse.up();
+const scr = page.locator('#scr');
+const box = await scr.boundingBox();
+const P = (x, y) => [box.x + x * box.width / 466, box.y + y * box.height / 466];
+async function swipe(x0, y0, x1, y1) { await page.mouse.move(...P(x0, y0)); await page.mouse.down(); for (let i = 1; i <= 6; i++) { await page.mouse.move(...P(x0 + (x1 - x0) * i / 6, y0 + (y1 - y0) * i / 6)); await page.waitForTimeout(20); } await page.mouse.up(); await page.waitForTimeout(500); }
+await page.mouse.move(...P(233, 233)); await page.mouse.down(); await page.waitForTimeout(1300); await page.mouse.up();
 await page.waitForTimeout(500);
-ok((await page.$eval('#log', e => e.textContent)).includes('carinho'), 'segurar a cabeça 1,2 s gera carinho');
-// espaço: duplo toque -> menu
-await page.keyboard.down('Space'); await page.waitForTimeout(70); await page.keyboard.up('Space');
-await page.waitForTimeout(80);
-await page.keyboard.down('Space'); await page.waitForTimeout(70); await page.keyboard.up('Space');
-await page.waitForTimeout(600);
-ok((await state()).includes('menu'), 'duplo toque pela barra de espaço abre o menu');
-// autorepeat do teclado não gera vários toques: segura espaço 1,2 s -> seleciona (Rosto)
-await page.keyboard.down('Space');
-for (let i = 0; i < 20; i++) { await page.waitForTimeout(60); await page.keyboard.down('Space'); }  // autorrepetição (repeat=true)
-await page.keyboard.up('Space');
-await page.waitForTimeout(500);
-ok((await state()).includes('face'), 'segurar espaço (com autorrepetição) é um único gesto');
-// botão solto fora / perda de foco não prende o sensor
-await page.mouse.move(box.x + 10, box.y + 10); await page.mouse.down();
+ok((await page.$eval('#log', e => e.textContent)).includes('carinho'), 'segurar o dedo na tela 1,3 s gera carinho');
+await swipe(233, 330, 233, 120);
+ok((await state()).includes('launcher'), 'deslizar para cima abre os apps');
+await page.screenshot({ path: `${out}/03_apps.png` });
+await swipe(130, 233, 360, 233);
+ok((await state()).includes('face'), 'deslizar para a direita volta ao rosto');
+await swipe(233, 120, 233, 330);
+ok((await state()).includes('quick'), 'deslizar para baixo abre os ajustes rápidos');
+await swipe(233, 330, 233, 120);
+// botão solto fora / perda de foco não prende o toque
+await page.mouse.move(...P(233, 233)); await page.mouse.down();
 await page.mouse.move(5, 5); await page.mouse.up();
-await page.waitForTimeout(200);
-ok(!(await page.$eval('#head', e => e.classList.contains('on'))), 'soltar fora da cabeça libera o sensor virtual');
-await page.screenshot({ path: `${out}/03_rosto.png` });
+await page.waitForTimeout(300);
+ok(!(await page.evaluate(() => window.TB.X.sim_pressed())), 'soltar fora da tela libera o toque');
+// sensores simulados
+await page.click('.tabs button[data-p=sens]');
+await page.click('#shake'); await page.waitForTimeout(700);
+ok((await state()).includes('Tonto'), 'sacudir deixa o Tuba tonto');
+await page.waitForTimeout(3000);
+await page.screenshot({ path: `${out}/04_rosto.png` });
 // Portal (já configurado) mostra abas
 await page.click('.tabs button[data-p=portal]');
 await page.waitForTimeout(1500);
@@ -73,10 +75,15 @@ ok(await fr.locator('#appView').isVisible(), 'portal abre as abas após o primei
 ok((await fr.locator('#hName').textContent()) === 'Júlia', 'apelido com acento chega ao portal');
 await fr.locator('button[data-tabbtn="Coleção"]').click();
 await page.waitForTimeout(500);
-await page.screenshot({ path: `${out}/04_colecao.png` });
+await page.screenshot({ path: `${out}/05_colecao.png` });
+await fr.locator('button[data-tabbtn="Aparência"]').click();
+await fr.locator('#eyeColors button[data-v=rosa]').click();
+await fr.locator('[data-save=look]').click();
+await page.waitForTimeout(500);
+ok((await page.evaluate(() => window.TB.api('GET', '/api/prefs').body.prefs.eyeColor)) === 'rosa', 'portal troca a cor dos olhos');
 await fr.locator('button[data-tabbtn="Foco e tempo"]').click();
 await page.waitForTimeout(300);
-await page.screenshot({ path: `${out}/05_foco.png` });
+await page.screenshot({ path: `${out}/06_foco.png` });
 // Nenhum recurso externo carregado
 const ext = await page.evaluate(() => performance.getEntriesByType('resource').map(r => r.name).filter(n => /^https?:/.test(n)));
 const extPortal = await frame.evaluate(() => performance.getEntriesByType('resource').map(r => r.name).filter(n => /^https?:/.test(n)));
@@ -111,7 +118,7 @@ for (const mode of ['ap', 'home']) {
   await p2.locator('#wDone').click(); await p2.waitForTimeout(500);
   ok(await p2.locator('#appView').isVisible(), `${mode}: assistente concluído via HTTP`);
   ok((await p2.locator('#hName').textContent()) === 'Tubarão', `${mode}: apelido salvo e relido`);
-  if (mode === 'ap') await p2.screenshot({ path: `${out}/06_portal_celular.png`, fullPage: false });
+  if (mode === 'ap') await p2.screenshot({ path: `${out}/07_portal_celular.png`, fullPage: false });
   await p2.close(); srv.kill();
 }
 await browser.close();

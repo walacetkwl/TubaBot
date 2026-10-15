@@ -1,7 +1,7 @@
 // Servidor HTTP local que imita o ESP32: serve o portal em "/" e responde /api/* com o
 // MESMO núcleo (WebAssembly). Testa o caminho fetch + X-Tuba-Token do portal, e permite
 // abrir o portal num celular na mesma rede do Mac.
-//   node tools/portal_server.mjs [porta] [--lite] [--home]
+//   node tools/portal_server.mjs [porta] [--sem-som] [--home]
 //   --home simula acesso pela rede de casa (exige o PIN mostrado no "visor", impresso no terminal)
 import http from 'node:http';
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.argv.find(a => /^\d+$/.test(a)) || 8080);
-const lite = process.argv.includes('--lite'), home = process.argv.includes('--home');
+const noSpeaker = process.argv.includes('--sem-som'), home = process.argv.includes('--home');
 const bytes = fs.readFileSync(path.join(root, 'simulator/tubabot_core.wasm'));
 let mem; const store = {};
 const dec = new TextDecoder(), enc = new TextEncoder();
@@ -20,11 +20,11 @@ const { instance } = await WebAssembly.instantiate(bytes, { env: {
   js_storage_save(k, p, n) { store[k] = new Uint8Array(mem.buffer, p, n).slice(); return 1; },
   js_storage_erase(k) { delete store[k]; },
   js_log(p) { console.log('[tuba]', cstr(p)); },
-  js_reboot() {}, js_display() {},
+  js_reboot() {}, js_display() {}, js_rtc() {},
 } });
 const X = instance.exports; mem = X.memory;
 const t0 = Date.now(); const now = () => Date.now() - t0;
-X.sim_init(lite ? 0 : 1, 1234, 0, now());
+X.sim_init(1234, 1, now(), noSpeaker ? 62 : 63);
 setInterval(() => X.sim_tick(now()), 20);
 function put(ptr, cap, s) { const b = enc.encode(s); if (b.length >= cap) return -1; const u = new Uint8Array(mem.buffer, ptr, cap); u.set(b); u[b.length] = 0; return b.length; }
 

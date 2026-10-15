@@ -4,3 +4,4 @@ js_storage_erase
 js_log
 js_reboot
 js_display
+js_rtc

@@ -23,9 +23,9 @@ export PATH="$LLVM_BIN:/opt/homebrew/opt/lld/bin:/usr/local/opt/lld/bin:$PATH"
 
 OUT=simulator/tubabot_core.wasm
 "$CLANG" --target=wasm32 -std=c++17 -O2 -ffreestanding -fno-builtin -nostdlib \
-  -fno-exceptions -fno-rtti -fno-threadsafe-statics -fvisibility=hidden \
+  -fno-exceptions -fno-rtti -ffp-contract=off -fno-threadsafe-statics -fvisibility=hidden \
   -Wall -Wno-unused-parameter \
-  -Wl,--no-entry -Wl,--strip-all -Wl,--initial-memory=2097152 -Wl,-z,stack-size=262144 \
+  -Wl,--no-entry -Wl,--strip-all -Wl,--initial-memory=8388608 -Wl,-z,stack-size=262144 \
   -Wl,--allow-undefined-file=simulator/imports.txt \
   -o "$OUT" core/*.cpp simulator/sim_main.cpp
 

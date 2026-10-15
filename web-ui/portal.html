@@ -11,8 +11,10 @@
 html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
 header{background:linear-gradient(160deg,#0a1a3a 0%,#0e2f78 60%,#1463ff 140%);color:#fff;padding:18px 16px 14px}
 .top{display:flex;gap:14px;align-items:center;max-width:760px;margin:0 auto}
-.oled{background:#000;border-radius:10px;padding:6px;box-shadow:0 0 0 3px #1c2c52,0 6px 18px rgba(0,0,0,.35);flex:none}
-.oled canvas{display:block;width:128px;height:64px;image-rendering:pixelated;image-rendering:crisp-edges}
+.oled{background:#000;border-radius:50%;padding:4px;box-shadow:0 0 0 3px #1c2c52,0 6px 18px rgba(0,0,0,.35);flex:none}
+.oled canvas{display:block;width:96px;height:96px;border-radius:50%}
+.sw4{display:flex;gap:8px;flex-wrap:wrap}.sw4 button{width:40px;height:40px;border-radius:50%;border:3px solid transparent;cursor:pointer}.sw4 button.on{border-color:var(--ink)}
+.days{display:flex;gap:4px;flex-wrap:wrap}.days label{display:inline-flex;align-items:center;gap:2px;font-size:13px}
 .who h1{margin:0;font-size:22px;letter-spacing:-.01em}
 .who p{margin:2px 0 0;color:#c6d6ff;font-size:14px}
 .pill{display:inline-block;padding:2px 9px;border-radius:99px;background:rgba(255,255,255,.14);font-size:12px;margin-top:6px}
@@ -78,7 +80,7 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
 </head>
 <body>
 <header><div class="top">
-  <div class="oled" title="Prévia do visor"><canvas id="oled" width="128" height="64"></canvas></div>
+  <div class="oled" title="Prévia do visor"><canvas id="oled" width="117" height="117"></canvas></div>
   <div class="who"><h1 id="hName">TubaBot</h1><p id="hSub">Conectando…</p><span class="pill" id="hModel">—</span></div>
 </div></header>
 
@@ -99,26 +101,31 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
 </section>
 
 <section data-tab="Aparência">
-  <div class="card"><h2>Visor</h2>
-    <label class="f" for="contrast">Brilho / contraste</label><input id="contrast" type="range" min="1" max="255" style="width:100%">
-    <div class="sw"><div><div class="t">Girar 180°</div><div class="d">Use se o visor ficou de cabeça para baixo na montagem.</div></div><label class="tg"><input type="checkbox" id="rotate180"><span></span></label></div>
+  <div class="card"><h2>Rosto e tela</h2>
+    <label class="f">Cor dos olhos</label><div class="sw4" id="eyeColors"></div>
+    <div class="sw"><div><div class="t">Brilho nos olhos</div><div class="d">Halo luminoso ao redor dos olhos.</div></div><label class="tg"><input type="checkbox" id="eyeGlow"><span></span></label></div>
+    <label class="f" for="watchFace">Mostrador do relógio</label><select id="watchFace"><option value="0">Digital</option><option value="1">Analógico</option><option value="2">Tuba (rostinho + hora)</option></select>
+    <label class="f" for="contrast">Brilho da tela</label><input id="contrast" type="range" min="10" max="255" style="width:100%">
+    <div class="sw"><div><div class="t">Brilho reduzido à noite</div><div class="d">No período de descanso a tela fica mais fraca.</div></div><label class="tg"><input type="checkbox" id="nightDim"><span></span></label></div>
+    <div class="sw"><div><div class="t">Girar 180°</div><div class="d">Use se a tela ficou de cabeça para baixo na montagem (o toque gira junto).</div></div><label class="tg"><input type="checkbox" id="rotate180"><span></span></label></div>
     <label class="f" for="favExpr">Expressão favorita</label><select id="favExpr"></select>
     <label class="f">Intensidade das animações</label>
     <div class="seg" id="anim"><button data-v="0">Calma</button><button data-v="1">Normal</button><button data-v="2">Animada</button></div>
     <label class="f" for="screenOff">Descanso do visor</label>
     <select id="screenOff"><option value="0">Nunca apagar</option><option value="60">1 minuto</option><option value="300">5 minutos</option><option value="900">15 minutos</option><option value="1800">30 minutos</option></select>
     <div class="hint">Timers e Pomodoro continuam com o visor apagado.</div>
-    <div class="sw"><div><div class="t">Abertura curta</div><div class="d">Barbatana e nome mais rápidos ao ligar.</div></div><label class="tg"><input type="checkbox" id="shortIntro"><span></span></label></div>
-    <div class="actions"><button class="btn" data-save="look">Salvar</button><button class="btn ghost" id="oledTest">Testar visor</button></div>
+    <div class="sw"><div><div class="t">Abertura curta</div><div class="d">Barbatana, mar e nome mais rápidos ao ligar.</div></div><label class="tg"><input type="checkbox" id="shortIntro"><span></span></label></div>
+    <div class="actions"><button class="btn" data-save="look">Salvar</button><button class="btn ghost" id="oledTest">Testar tela</button></div>
   </div>
 </section>
 
 <section data-tab="Som e vibração">
   <div class="card"><h2>Som e vibração</h2>
-    <div class="note warn" id="liteNote" hidden>O TubaBot Lite não tem buzzer nem motor de vibração: todos os avisos aparecem na tela.</div>
-    <div class="sw"><div><div class="t">Som</div><div class="d">Bipes curtos do buzzer (liga/desliga, sem melodias).</div></div><label class="tg"><input type="checkbox" id="sound"><span></span></label></div>
+    <div class="note warn" id="liteNote" hidden>Sem alto-falante conectado: todos os avisos aparecem só na tela.</div>
+    <div class="sw"><div><div class="t">Som</div><div class="d">Melodias, "falinhas" e reações pelo alto-falante.</div></div><label class="tg"><input type="checkbox" id="sound"><span></span></label></div>
+    <label class="f" for="volume">Volume</label><input id="volume" type="range" min="0" max="100" style="width:100%">
     <div class="sw"><div><div class="t">Modo silencioso</div><div class="d">Corta todo som. A vibração segue sua escolha abaixo.</div></div><label class="tg"><input type="checkbox" id="silent"><span></span></label></div>
-    <div class="sw"><div><div class="t">Vibração</div><div class="d">Toques suaves no carinho e nos avisos.</div></div><label class="tg"><input type="checkbox" id="vibration"><span></span></label></div>
+    <div class="sw"><div><div class="t">Vibração</div><div class="d" id="vibD">Toques suaves no carinho e nos avisos (motor opcional).</div></div><label class="tg"><input type="checkbox" id="vibration"><span></span></label></div>
     <div class="actions"><button class="btn" data-save="sound">Salvar</button><button class="btn ghost" id="prevSound">Prévia do aviso</button></div>
     <div class="hint" id="prevHint"></div>
   </div>
@@ -141,6 +148,10 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
     <div class="err" id="e_timerPresetsS"></div>
     <div class="actions"><button class="btn" data-save="timers">Salvar atalhos</button></div>
   </div>
+  <div class="card"><h2>Alarmes</h2><p class="sub">Tocam pela hora do relógio (RTC). Sem dias marcados = toca uma vez. Vire o Tuba para baixo para adiar 5 min.</p>
+    <div id="alarms"></div><div class="err" id="e_alarms"></div>
+    <div class="actions"><button class="btn" data-save="alarms">Salvar alarmes</button></div>
+  </div>
   <div class="card"><h2>Lembretes</h2><p class="sub">Avisos de rotina por intervalo. Esperam o fim do foco.</p>
     <div id="rems"></div>
     <div class="sw"><div><div class="t">Período de descanso</div><div class="d">Sem lembretes nesse horário (precisa da hora ajustada).</div></div><label class="tg"><input type="checkbox" id="qe"><span></span></label></div>
@@ -151,10 +162,11 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
 </section>
 
 <section data-tab="Jogos">
-  <div class="card games"><h2>Jogos</h2><p class="sub">Todos funcionam com a cabeça do Tuba (um toque). Segure 1,5 s para sair de um jogo.</p>
+  <div class="card games"><h2>Jogos</h2><p class="sub">Toque na tela para jogar. Segure 1,5 s parado para sair de um jogo.</p>
     <div class="g"><h3>Pula, Tuba!</h3><p>Toque para o tubarão pular os obstáculos. Cada obstáculo vale 1 ponto.</p><b id="rJump"></b></div>
     <div class="g"><h3>Tuba Reflexo</h3><p>Toque para preparar, espere o <b>AGORA!</b> e toque o mais rápido que puder. Antes do sinal não vale.</p><b id="rReflex"></b></div>
     <div class="g"><h3>Hora do Bote</h3><p>Toque quando o peixe estiver <b>inteiro</b> dentro do quadrado. Cada peixe pego deixa o próximo mais rápido.</p><b id="rFish"></b></div>
+    <div class="g"><h3>Mergulho do Tuba <small>(novo)</small></h3><p>Incline o Tuba (ou arraste o dedo) para pegar peixes e fugir das águas-vivas. 3 vidas.</p><b id="rDive"></b></div>
     <div class="g"><h3>No Tempo Certo</h3><p>Veja o alvo (3,00 a 8,00 s), toque para o 3‑2‑1‑VAI e toque de novo quando achar que chegou lá.</p><b id="rTiming"></b></div>
     <div class="sw"><div><div class="t">Pula, Tuba! com início fácil</div><div class="d">Obstáculos baixos e estreitos no começo.</div></div><label class="tg"><input type="checkbox" id="jumpEasy"><span></span></label></div>
     <div class="actions"><button class="btn" data-save="games">Salvar</button></div>
@@ -168,7 +180,7 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
 </section>
 
 <section data-tab="Hora e data">
-  <div class="card"><h2>Hora e data</h2><p class="sub">O Tuba não tem bateria de relógio: depois de ficar sem energia, acerte de novo.</p>
+  <div class="card"><h2>Hora e data</h2><p class="sub">O Tuba guarda a hora no relógio da placa (RTC), mesmo desligado. Acerte uma vez por aqui ou ligue a hora automática.</p>
     <dl class="kv"><dt>No Tuba</dt><dd id="tNow">—</dd><dt>Neste aparelho</dt><dd id="tHere">—</dd></dl>
     <div class="actions"><button class="btn" id="sendTime">Usar a hora deste aparelho</button></div>
     <label class="f" for="manual">Ajuste manual</label><input id="manual" type="datetime-local">
@@ -176,6 +188,24 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
     <label class="f" for="tz">Fuso horário</label><select id="tz"></select>
     <div class="sw"><div><div class="t">Formato 24 horas</div></div><label class="tg"><input type="checkbox" id="c24"><span></span></label></div>
     <div class="actions"><button class="btn" data-save="time">Salvar formato e fuso</button></div>
+  </div>
+</section>
+
+<section data-tab="Sensores e clima">
+  <div class="card"><h2>Reações</h2><p class="sub">O Tuba sente movimento e som. Do microfone só o <b>nível</b> é usado: nada é gravado nem enviado.</p>
+    <div class="sw"><div><div class="t">Reagir a movimento</div><div class="d">Sacudir deixa tonto; pegar no colo dá susto e "oi".</div></div><label class="tg"><input type="checkbox" id="imuReactions"><span></span></label></div>
+    <div class="sw"><div><div class="t">Olhos seguem a inclinação</div></div><label class="tg"><input type="checkbox" id="tiltLook"><span></span></label></div>
+    <div class="sw"><div><div class="t">Pegar no colo acende a tela</div></div><label class="tg"><input type="checkbox" id="wakeOnPickup"><span></span></label></div>
+    <div class="sw"><div><div class="t">Virar para baixo adia o alarme</div><div class="d">E também apaga a tela.</div></div><label class="tg"><input type="checkbox" id="faceDownSnooze"><span></span></label></div>
+    <div class="sw"><div><div class="t">Reagir a sons</div><div class="d">Palmas assustam, barulho alto incomoda e música faz dançar.</div></div><label class="tg"><input type="checkbox" id="micReactions"><span></span></label></div>
+    <div class="actions"><button class="btn" data-save="sens">Salvar</button></div>
+  </div>
+  <div class="card"><h2>Clima</h2><p class="sub">Previsão do Open-Meteo (sem cadastro). Precisa da rede de casa. Desligado por padrão.</p>
+    <div class="sw"><div><div class="t">Mostrar o clima</div></div><label class="tg"><input type="checkbox" id="weatherEnabled"><span></span></label></div>
+    <label class="f" for="city">Cidade</label><select id="city"></select>
+    <div class="row" id="customLL" hidden><div><label class="f" for="lat">Latitude</label><input id="lat" type="text" inputmode="decimal" placeholder="-23.5505"></div><div><label class="f" for="lon">Longitude</label><input id="lon" type="text" inputmode="decimal" placeholder="-46.6333"></div></div>
+    <div class="err" id="e_weather"></div><div class="hint" id="weatherNow"></div>
+    <div class="actions"><button class="btn" data-save="weather">Salvar</button><button class="btn ghost" data-act="weather.refresh">Atualizar agora</button></div>
   </div>
 </section>
 
@@ -187,7 +217,7 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
     <select id="apTimeout"><option value="0">Nunca (fechar manualmente)</option><option value="10">10 minutos</option><option value="15">15 minutos</option><option value="30">30 minutos</option><option value="60">1 hora</option></select>
     <div class="actions"><button class="btn" data-save="net">Salvar</button><button class="btn ghost" data-act="ap.close">Fechar rede agora</button></div>
   </div>
-  <div class="card"><h2>Rede de casa (opcional)</h2><p class="sub">Só é usada se você ligar a hora automática. A senha nunca volta para esta tela.</p>
+  <div class="card"><h2>Rede de casa (opcional)</h2><p class="sub">Usada para a hora automática e o clima. A senha nunca volta para esta tela.</p>
     <label class="f" for="ssid">Nome da rede</label><input id="ssid" type="text" autocomplete="off" maxlength="32">
     <label class="f" for="wpass">Senha</label><input id="wpass" type="password" autocomplete="new-password" maxlength="63">
     <div class="err" id="e_wifi"></div>
@@ -200,7 +230,7 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
   <div class="card"><h2>Sistema</h2><dl class="kv" id="sysKv"></dl>
     <div class="actions"><button class="btn sec" id="backup">Baixar backup</button><label class="btn ghost">Importar backup<input id="restore" type="file" accept="application/json,.json" hidden></label><button class="btn ghost" data-act="reboot">Reiniciar</button></div>
   </div>
-  <div class="card"><h2>Atualizar firmware</h2><p class="sub">Arquivo .bin do TubaBot, gravado pela própria rede do Tuba (sem servidor externo).</p>
+  <div class="card"><h2>Atualizar firmware</h2><p class="sub">Arquivo .bin do TubaBot v2 (ESP32-S3), gravado pela própria rede do Tuba (sem servidor externo).</p>
     <input id="fw" type="file" accept=".bin">
     <div class="bar" id="fwBar" hidden><i style="width:0"></i></div><div class="hint" id="fwMsg"></div>
     <div class="actions"><button class="btn" id="fwGo">Enviar atualização</button></div>
@@ -215,7 +245,7 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
 <section data-tab="Diagnóstico" data-hidden="1">
   <div class="card"><h2>Diagnóstico</h2><p class="sub">Para conferir a montagem. Nada aqui burla o modo silencioso.</p>
     <dl class="kv" id="diagKv"></dl>
-    <div class="actions"><button class="btn sec" id="dOled">Padrão de teste do visor</button><button class="btn sec" data-preview="test">Testar saídas</button><button class="btn ghost" data-act="config.open">Reabrir configuração no Tuba</button></div>
+    <div class="actions"><button class="btn sec" id="dOled">Padrão de teste da tela</button><button class="btn sec" data-preview="test">Testar saídas</button><button class="btn ghost" data-act="config.open">Reabrir configuração no Tuba</button></div>
     <label class="f">Últimos eventos</label><div class="log mono" id="log"></div>
   </div>
 </section>
@@ -232,17 +262,17 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
       <dl class="kv"><dt>Hora</dt><dd id="wTime"></dd></dl>
       <div id="wSound"><div class="sw"><div><div class="t">Som</div></div><label class="tg"><input type="checkbox" id="wSnd" checked><span></span></label></div>
       <div class="sw"><div><div class="t">Vibração</div></div><label class="tg"><input type="checkbox" id="wVib" checked><span></span></label></div></div>
-      <div class="note warn" id="wLite" hidden>Seu modelo é o TubaBot Lite: os avisos aparecem só na tela.</div>
+      <div class="note warn" id="wLite" hidden>Sem alto-falante conectado: os avisos aparecem só na tela.</div>
       <div class="actions"><button class="btn wide" data-next>Continuar</button></div></div>
     <div data-step="2" hidden><h2>Tudo pronto!</h2><p class="sub">Você pode conectar à rede de casa depois, se quiser. O Tuba funciona offline.</p>
       <div class="actions"><button class="btn wide" id="wDone">Usar offline e começar</button></div>
-      <div class="hint">Para voltar aqui: menu do Tuba → Configurar, ou segure a cabeça por 8 segundos.</div></div>
+      <div class="hint">Para voltar aqui: Apps → Ajustes → Rede e portal, segure a tela por 8 segundos ou segure o botão BOOT.</div></div>
   </div></div></main></div>
 
 <dialog id="dlg"><h2 id="dlgT"></h2><p id="dlgP" class="sub"></p><input id="dlgI" type="text" autocomplete="off"><div class="err" id="dlgE"></div>
   <div class="actions"><button class="btn ghost" id="dlgNo">Cancelar</button><button class="btn" id="dlgOk">Confirmar</button></div></dialog>
 <div id="toast"></div>
-<footer>TubaBot · funciona sem internet · <span id="fver"></span></footer>
+<footer>TubaBot v2 · funciona sem internet · <span id="fver"></span></footer>
 
 <script>
 "use strict";
@@ -281,12 +311,13 @@ async function session(){
 }
 
 // ── OLED: framebuffer real (layout de páginas do SSD1306) ──
-function drawFrame(cv,b64){
-  const raw=atob(b64), ctx=cv.getContext("2d"), img=ctx.createImageData(128,64);
-  for(let y=0;y<64;y++)for(let x=0;x<128;x++){const on=(raw.charCodeAt((y>>3)*128+x)>>(y&7))&1, i=(y*128+x)*4; img.data[i]=img.data[i+1]=img.data[i+2]=on?255:0; img.data[i+3]=255;}
+// ── espelho da tela: miniatura RGB565 (1:4) ──
+function drawFrame(cv,f){
+  const raw=atob(f.data), w=f.w, h=f.h, ctx=cv.getContext("2d"), img=ctx.createImageData(w,h);
+  for(let i=0;i<w*h;i++){const v=raw.charCodeAt(2*i)|(raw.charCodeAt(2*i+1)<<8), r=(v>>11)&31, g=(v>>5)&63, b=v&31; img.data[4*i]=(r<<3)|(r>>2); img.data[4*i+1]=(g<<2)|(g>>4); img.data[4*i+2]=(b<<3)|(b>>2); img.data[4*i+3]=255;}
   ctx.putImageData(img,0,0);
 }
-async function pollFrame(){ const r=await api("GET","/api/frame"); if(r.status===200) drawFrame($("#oled"),r.data.data); }
+async function pollFrame(){ const r=await api("GET","/api/frame"); if(r.status===200) drawFrame($("#oled"),r.data); }
 
 // ── preencher campos ──
 function segSet(id,v){ $$("#"+id+" button").forEach(b=>b.classList.toggle("on",b.dataset.v===String(v))); }
@@ -296,13 +327,22 @@ function fmtDur(s){const h=Math.floor(s/3600),m=Math.floor(s/60)%60,ss=s%60;retu
 function chars(s){return [...s.trim()].length;}
 
 function fill(){
-  const p=PR, lite=ST.model==="lite";
+  const p=PR, lite=!(ST.caps&&ST.caps.speaker), noMotor=!(ST.caps&&ST.caps.motor);
   $("#nick").value=p.nickname; $("#nickCount").textContent=chars(p.nickname);
   segSet("pers",p.personality); $("#persHint").textContent=PERS[p.personality];
   $("#contrast").value=p.contrast; $("#rotate180").checked=p.rotate180; segSet("anim",p.animLevel);
   $("#screenOff").value=String(p.screenOffS); if(!$("#screenOff").value){const o=new Option(fmtDur(p.screenOffS),p.screenOffS);$("#screenOff").add(o);$("#screenOff").value=String(p.screenOffS);}
   $("#shortIntro").checked=p.shortIntro;
-  ["sound","silent","vibration"].forEach(k=>{$("#"+k).checked=p[k];$("#"+k).disabled=lite;});
+  ["sound","silent","vibration"].forEach(k=>{$("#"+k).checked=p[k];$("#"+k).disabled=lite&&k!=="vibration";});
+  $("#vibration").disabled=noMotor; $("#vibD").textContent=noMotor?"Precisa do motor opcional no conector (GPIO16).":"Toques suaves no carinho e nos avisos.";
+  $("#volume").value=p.volume; $("#volume").disabled=lite;
+  $("#eyeGlow").checked=p.eyeGlow; $("#watchFace").value=String(p.watchFace); $("#nightDim").checked=p.nightDim;
+  $$("#eyeColors button").forEach(b=>b.classList.toggle("on",b.dataset.v===p.eyeColor));
+  ["imuReactions","micReactions","tiltLook","faceDownSnooze","wakeOnPickup","weatherEnabled"].forEach(k=>$("#"+k).checked=p[k]);
+  $("#city").value=p.weather.city; $("#customLL").hidden=p.weather.city!=="custom";
+  $("#lat").value=(p.weather.latE4/1e4).toFixed(4); $("#lon").value=(p.weather.lonE4/1e4).toFixed(4);
+  const DN=["D","S","T","Q","Q","S","S"];
+  $("#alarms").innerHTML=p.alarms.map((a,i)=>`<div class="row" style="align-items:end;border-top:1px solid var(--line);padding-top:8px"><div><label class="f">Nome</label><input type="text" class="al" maxlength="30" value="${esc(a.label)}"></div><div style="flex:0 1 120px"><label class="f">Hora</label><input type="time" class="at" value="${String(a.hour).padStart(2,"0")}:${String(a.minute).padStart(2,"0")}"></div><label class="tg" style="margin-bottom:9px"><input type="checkbox" class="ae" ${a.enabled?"checked":""}><span></span></label><div class="days" style="flex-basis:100%">${DN.map((d,k)=>`<label><input type="checkbox" class="ad${i}" ${(a.days>>k)&1?"checked":""}>${d}</label>`).join("")}</div></div>`).join("");
   $("#liteNote").hidden=!lite; $("#prevSound").disabled=lite;
   $("#pf").value=p.pomodoro.focusMin;$("#ps").value=p.pomodoro.shortMin;$("#pl").value=p.pomodoro.longMin;$("#pc").value=p.pomodoro.cyclesBeforeLong;$("#pa").checked=p.pomodoro.autoStart;
   $("#presets").innerHTML=p.timerPresetsS.map((s,i)=>`<div><label class="f">${i===5?"Personalizado":"Atalho "+(i+1)}</label><input type="text" class="pre" value="${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}" inputmode="numeric" aria-label="minutos:segundos"></div>`).join("");
@@ -324,14 +364,16 @@ function fillStatus(){
   $("#tNow").textContent=s.time.valid?s.time.local:"não ajustada";
   const n=s.net; $("#netKv").innerHTML=`<dt>Rede do Tuba</dt><dd>${n.apActive?esc(n.apSsid):"fechada"}</dd><dt>Endereço</dt><dd>${esc(n.apIp)} · ${esc(n.mdns)}</dd><dt>Casa</dt><dd>${n.homeConfigured?esc(n.homeSsid)+" ("+({connected:"conectado",connecting:"conectando",failed:"sem conexão",off:"desligado"}[n.home])+")":"não usada"}</dd>`;
   $("#sysKv").innerHTML=`<dt>Modelo</dt><dd>${esc(s.modelName)}</dd><dt>Versão</dt><dd>${esc(s.version)}</dd><dt>Ligado há</dt><dd>${fmtDur(Math.floor(s.uptimeMs/1000))}</dd><dt>Gravações</dt><dd>${s.storage.writes}${s.storage.recovered?" · dados restaurados ao padrão":""}</dd>`;
-  $("#diagKv").innerHTML=`<dt>Sensor</dt><dd>${s.input.stuck?"PRESO":s.input.pressed?"tocado agora":"livre"} · ${s.input.rawEdges} bordas</dd><dt>Som permitido</dt><dd>${s.outputs.soundAllowed?"sim":"não"}</dd><dt>Vibração permitida</dt><dd>${s.outputs.vibrationAllowed?"sim":"não"}</dd><dt>Tela</dt><dd>${esc(s.screen)}</dd>`;
+  const pw=s.power||{}, mo=s.motion||{}, so=s.sound||{};
+  if(s.weather) $("#weatherNow").textContent=!s.weather.enabled?"":s.weather.valid?`Agora: ${(s.weather.tempC10/10).toFixed(0)}° · ${s.weather.text}`:"Ainda sem dados (confira a rede de casa).";
+  $("#diagKv").innerHTML=`<dt>Toque</dt><dd>${s.input.stuck?"PRESO":s.input.pressed?"tocado agora":"livre"} · ${s.input.rawEdges} bordas</dd><dt>Movimento</dt><dd>${mo.active?mo.pose+" · incl. "+mo.tiltX+"/"+mo.tiltY:"sem leitura"}</dd><dt>Som ambiente</dt><dd>${so.active?"nível "+so.level+(so.music?" · música":""):"sem leitura"}</dd><dt>Energia</dt><dd>${pw.known?(pw.battery?pw.percent+"% "+pw.mv+" mV":"sem bateria")+(pw.charging?" · carregando":""):"sem leitura"}</dd><dt>Som permitido</dt><dd>${s.outputs.soundAllowed?"sim":"não"}</dd><dt>Vibração permitida</dt><dd>${s.outputs.vibrationAllowed?"sim":"não"}</dd><dt>Tela</dt><dd>${esc(s.screen)}</dd>`;
   const lg=$("#log"); if(s.event.seq!==lg._seq){lg._seq=s.event.seq; lg.insertAdjacentHTML("afterbegin",`<div>${new Date().toLocaleTimeString()} · ${esc(s.event.last)}</div>`);}
 }
 
 async function loadRecords(){
   const r=await api("GET","/api/records"); if(r.status!==200) return; const p=r.data.progress;
   $("#rJump").textContent="Recorde: "+p.jumpBest+" obstáculos"; $("#rReflex").textContent="Melhor reação: "+(p.reflexBestMs?p.reflexBestMs+" ms":"—");
-  $("#rFish").textContent="Recorde: "+p.fishBest+" peixes"; $("#rTiming").textContent="Melhor precisão: "+(p.timingBestPct100?(p.timingBestPct100/100).toFixed(2).replace(".",",")+"%":"—");
+  $("#rFish").textContent="Recorde: "+p.fishBest+" peixes"; $("#rDive").textContent="Recorde: "+p.diveBest+" peixes"; $("#rTiming").textContent="Melhor precisão: "+(p.timingBestPct100?(p.timingBestPct100/100).toFixed(2).replace(".",",")+"%":"—");
 }
 async function loadCollection(){
   const r=await api("GET","/api/collection"); if(r.status!==200) return; COLL=r.data; $("#testNote").hidden=!COLL.testProfile;
@@ -342,10 +384,17 @@ async function loadCollection(){
 
 // ── eventos de UI ──
 $("#nick").addEventListener("input",e=>$("#nickCount").textContent=chars(e.target.value));
+$("#eyeColors").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return; $$("#eyeColors button").forEach(x=>x.classList.toggle("on",x===b));});
+$("#city").addEventListener("change",e=>$("#customLL").hidden=e.target.value!=="custom");
 const savers={
   me:()=>save({nickname:$("#nick").value,personality:segGet("pers")}),
-  look:()=>save({contrast:+$("#contrast").value,rotate180:$("#rotate180").checked,favoriteExpr:$("#favExpr").value,animLevel:+segGet("anim"),screenOffS:+$("#screenOff").value,shortIntro:$("#shortIntro").checked}),
-  sound:()=>save({sound:$("#sound").checked,silent:$("#silent").checked,vibration:$("#vibration").checked}),
+  look:()=>save({brightness:+$("#contrast").value,eyeColor:($("#eyeColors button.on")||{}).dataset?.v||PR.eyeColor,eyeGlow:$("#eyeGlow").checked,watchFace:+$("#watchFace").value,nightDim:$("#nightDim").checked,rotate180:$("#rotate180").checked,favoriteExpr:$("#favExpr").value,animLevel:+segGet("anim"),screenOffS:+$("#screenOff").value,shortIntro:$("#shortIntro").checked}),
+  sound:()=>save({sound:$("#sound").checked,silent:$("#silent").checked,vibration:$("#vibration").checked,volume:+$("#volume").value}),
+  alarms:()=>save({alarms:$$(".al").map((l,i)=>{const [h,m]=($$(".at")[i].value||"07:00").split(":").map(Number);let d=0;$$(".ad"+i).forEach((c,k)=>{if(c.checked)d|=1<<k;});return {label:l.value.trim(),hour:h,minute:m,days:d,enabled:$$(".ae")[i].checked};})}),
+  sens:()=>save({imuReactions:$("#imuReactions").checked,micReactions:$("#micReactions").checked,tiltLook:$("#tiltLook").checked,faceDownSnooze:$("#faceDownSnooze").checked,wakeOnPickup:$("#wakeOnPickup").checked}),
+  weather:()=>{const c=$("#city").value, w={city:c}; if(c==="custom"){const la=parseFloat($("#lat").value.replace(",",".")),lo=parseFloat($("#lon").value.replace(",","."));
+    if(!(la>=-90&&la<=90&&lo>=-180&&lo<=180)){$("#e_weather").textContent="Latitude/longitude inválidas";return;} w.latE4=Math.round(la*1e4); w.lonE4=Math.round(lo*1e4);}
+    return save({weatherEnabled:$("#weatherEnabled").checked,weather:w});},
   pomo:()=>save({pomodoro:{focusMin:+$("#pf").value,shortMin:+$("#ps").value,longMin:+$("#pl").value,cyclesBeforeLong:+$("#pc").value,autoStart:$("#pa").checked}}),
   timers:()=>{const v=$$(".pre").map(i=>{const m=i.value.trim().match(/^(\d{1,4})(?::(\d{1,2}))?$/);return m?(+m[1])*60+(+(m[2]||0)):-1;});
     if(v.some(x=>x<1||x>86399)){$("#e_timerPresetsS").textContent="Use minutos:segundos, de 0:01 a 1439:59";return;} return save({timerPresetsS:v});},
@@ -365,7 +414,7 @@ document.addEventListener("click",async e=>{
 });
 $("#prevSound").onclick=()=>previewOut("timer");
 async function previewOut(p){ const r=await act("preview",{pattern:p}); if(r.status===200){ const s=r.data.soundAllowed, v=r.data.vibrationAllowed;
-  $("#prevHint").textContent=ST.model==="lite"?"Lite: sem saídas físicas — o aviso é só visual.":`Som: ${s?"sim":"não (silencioso/desligado)"} · Vibração: ${v?"sim":"não"}`; toast("Prévia enviada"); } }
+  $("#prevHint").textContent=!(ST.caps&&ST.caps.speaker)?"Sem alto-falante: o aviso é só visual.":`Som: ${s?"sim":"não (silencioso/desligado)"} · Vibração: ${v?"sim":"não"}`; toast("Prévia enviada"); } }
 $("#oledTest").onclick=$("#dOled").onclick=()=>act("diag.oled").then(()=>toast("Olhe o visor"));
 $("#diagLink").onclick=e=>{e.preventDefault();showTab("Diagnóstico");};
 function nowEpoch(){return Math.floor(Date.now()/1000);}
@@ -418,11 +467,11 @@ function showTab(name){ $$("section").forEach(s=>s.classList.toggle("on",s.datas
 // ── assistente de primeiro uso ──
 let wStep=0;
 function wizShow(){ $$("[data-step]").forEach(d=>d.hidden=+d.dataset.step!==wStep); $$(".steps i").forEach((i,k)=>i.classList.toggle("on",k<=wStep));
-  $("#wTime").textContent=new Date().toLocaleString("pt-BR"); const lite=ST.model==="lite"; $("#wSound").hidden=lite; $("#wLite").hidden=!lite; }
+  $("#wTime").textContent=new Date().toLocaleString("pt-BR"); const lite=!(ST.caps&&ST.caps.speaker); $("#wSound").hidden=lite; $("#wLite").hidden=!lite; }
 document.addEventListener("click",async e=>{ if(!e.target.matches("[data-next]")) return;
   if(wStep===0){ const ok=await save({nickname:$("#wNick").value,personality:segGet("wPers")},"w"); if(!ok) return; }
   if(wStep===1){ const tz=localTz(); const b={epoch:nowEpoch()}; if(ZONES.some(z=>z.iana===tz)) b.tz=tz; await api("POST","/api/time",b);
-    if(ST.model!=="lite") await save({sound:$("#wSnd").checked,vibration:$("#wVib").checked}); }
+    if(ST.caps&&ST.caps.speaker) await save({sound:$("#wSnd").checked,vibration:$("#wVib").checked}); }
   wStep++; wizShow(); });
 $("#wDone").onclick=async()=>{ if(await save({setupDone:true})){ await refresh(); $("#wizView").hidden=true; $("#appView").hidden=false; showTab("Meu Tuba"); } };
 
@@ -434,6 +483,9 @@ async function boot(){
   if(s.status!==200){ $("#hSub").textContent="Não encontrei o Tuba. Confira se está na rede dele."; return; }
   ST=s.data; PR=p.data.prefs; ZONES=z.data.zones.map(x=>({...x,off:{"UTC":0,"America/Noronha":-120,"America/Manaus":-240,"America/Cuiaba":-240,"America/Rio_Branco":-300}[x.iana]??-180}));
   $("#tz").innerHTML=ZONES.map(x=>`<option value="${x.iana}">${esc(x.label)}</option>`).join("");
+  const o=await api("GET","/api/options");
+  if(o.status===200){ $("#city").innerHTML=o.data.cities.map(c=>`<option value="${c.key}">${esc(c.name)}</option>`).join("")+`<option value="custom">Outro lugar (latitude/longitude)</option>`;
+    $("#eyeColors").innerHTML=o.data.eyeColors.map(c=>`<button type="button" data-v="${c.key}" title="${esc(c.name)}" aria-label="${esc(c.name)}" style="background:${c.hex}"></button>`).join(""); }
   fill(); fillStatus(); await loadCollection();
   if(!ST.setupDone){ $("#appView").hidden=true; $("#wizView").hidden=false; wizShow(); }
   else { $("#wizView").hidden=true; $("#appView").hidden=false; let t="Meu Tuba"; try{t=sessionStorage.getItem("tab")||t;}catch(e){} showTab(TABS.includes(t)?t:"Meu Tuba"); }
