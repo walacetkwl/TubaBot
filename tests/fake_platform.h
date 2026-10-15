@@ -19,6 +19,8 @@ struct FakePlatform : public tb::Platform {
   int displayCalls = 0;
   int64_t rtc = 0;
   int rtcWrites = 0;
+  const char* manifestUrl = "";
+  const char* telemetryUrl = "";
   char factory[tb::FACTORY_MAX] = {0};
   size_t factoryLen = 0;
 
@@ -54,7 +56,8 @@ struct FakePlatform : public tb::Platform {
     staConfigured = true; strncpy(staSsid, ssid, 32); strncpy(staPassStored, pass, 64); return true;
   }
   void wifiForget() override { staConfigured = false; staConnected = false; staSsid[0] = 0; staPassStored[0] = 0; }
-  void sysInfo(tb::SysInfo& s) override { s = tb::SysInfo(); s.simulated = true; }
+  void sysInfo(tb::SysInfo& s) override { s = tb::SysInfo(); s.simulated = true; strcpy(s.deviceId, "AABBCCDDEEFF"); }
+  const char* serviceUrl(tb::Service sv) override { return sv == tb::Service::UpdateManifest ? manifestUrl : telemetryUrl; }
   void requestReboot() override { reboots++; }
   void applyDisplay(uint8_t b, bool r) override { brightness = b; rotate = r; displayCalls++; }
   void setTimezone(const char*) override {}

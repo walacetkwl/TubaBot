@@ -1,6 +1,7 @@
 // Visual colorido dos jogos (a lógica fica em games.cpp, inalterada da v1).
 #include "games.h"
 #include "ui.h"
+#include "i18n.h"
 
 namespace tb {
 
@@ -123,7 +124,7 @@ static void scoreTop(Canvas& c, const char* s, Color col) { c.textCentered(42.f,
 void JumpGame::draw(Canvas& c, ms_t now) {
   char b[40];
   if (phase_ == GamePhase::Intro) {
-    StrBuf r(b, sizeof b); r.put("Recorde: ").num(best);
+    StrBuf r(b, sizeof b); r.put(tr("Recorde: ")).num(best);
     introCard(c, Icon::Shark, 0x5CC8FF, "Pula, Tuba!", "Toque para pular", "os corais", b);
     return;
   }
@@ -153,8 +154,8 @@ void JumpGame::draw(Canvas& c, ms_t now) {
   scoreTop(c, b, ui::TEXT);
   if (phase_ == GamePhase::Result) {
     char l1[32], l2[32];
-    StrBuf a(l1, sizeof l1); a.put("Pontos: ").num(score_);
-    StrBuf r(l2, sizeof l2); if (newRecord) r.put("Novo recorde!"); else r.put("Recorde: ").num(best);
+    StrBuf a(l1, sizeof l1); a.put(tr("Pontos: ")).num(score_);
+    StrBuf r(l2, sizeof l2); if (newRecord) r.put(tr("Novo recorde!")); else r.put(tr("Recorde: ")).num(best);
     resultCard(c, "Ops! Quase!", l1, l2, newRecord, 0x5CC8FF);
     drawResultFooter(c);
   } else {
@@ -168,7 +169,7 @@ void ReflexGame::draw(Canvas& c, ms_t now) {
   char b[40];
   switch (sub_) {
     case Sub::Ready: {
-      StrBuf s(b, sizeof b); s.put("Recorde: "); if (best) s.num(best).put(" ms"); else s.put("--");
+      StrBuf s(b, sizeof b); s.put(tr("Recorde: ")); if (best) s.num(best).put(tr(" ms")); else s.put("--");
       introCard(c, Icon::Bolt, 0xFFD54A, "Tuba Reflexo", "Espere o AGORA!", "e toque rápido", b);
       break;
     }
@@ -186,13 +187,13 @@ void ReflexGame::draw(Canvas& c, ms_t now) {
       signalRendered_ = true;
       break;
     case Sub::Done: {
-      StrBuf s(b, sizeof b); s.num(lastMs_).put(" ms");
+      StrBuf s(b, sizeof b); s.num(lastMs_).put(tr(" ms"));
       Color col = lastMs_ < 250 ? ui::OK : lastMs_ < 400 ? 0xFFD54A : ui::WARN;
       c.textCentered(124.f, b, FONT_XXL, ui::acc(col));
       const char* react = lastMs_ < 200 ? "Uau! Relâmpago!" : lastMs_ < 300 ? "Rápido!" : lastMs_ < 450 ? "Boa!" : "Dá pra melhorar";
       c.textCentered(48.f, react, FONT_L, ui::TEXT);
       StrBuf s2(b, sizeof b);
-      if (newRecord) s2.put("Novo recorde!"); else { s2.put("Melhor: "); if (best) s2.num(best).put(" ms"); else s2.put("--"); }
+      if (newRecord) s2.put(tr("Novo recorde!")); else { s2.put(tr("Melhor: ")); if (best) s2.num(best).put(tr(" ms")); else s2.put("--"); }
       c.textCentered(160.f, b, FONT_M, newRecord ? GOLD : ui::MUTED);
       drawResultFooter(c);
       break;
@@ -220,7 +221,7 @@ void ReflexGame::draw(Canvas& c, ms_t now) {
 void FishGame::draw(Canvas& c, ms_t now) {
   char b[40];
   if (phase_ == GamePhase::Intro) {
-    StrBuf s(b, sizeof b); s.put("Recorde: ").num(best).put(" peixes");
+    StrBuf s(b, sizeof b); s.put(tr("Recorde: ")).num(best).put(tr(" peixes"));
     introCard(c, Icon::Fish, FISH, "Hora do Bote", "Toque com o peixe", "TODO dentro do quadro", b);
     return;
   }
@@ -251,8 +252,8 @@ void FishGame::draw(Canvas& c, ms_t now) {
   } else if (phase_ == GamePhase::Result) {
     fishSide(c, GV::X((float)lostX_), GV::Y((float)kFishY), GV::kScale, 0x9AA5B8, 0xC9D1DE);
     char l1[32], l2[32];
-    StrBuf a(l1, sizeof l1); a.put("Peixes: ").num(captures_);
-    StrBuf r(l2, sizeof l2); if (newRecord) r.put("Novo recorde!"); else r.put("Recorde: ").num(best);
+    StrBuf a(l1, sizeof l1); a.put(tr("Peixes: ")).num(captures_);
+    StrBuf r(l2, sizeof l2); if (newRecord) r.put(tr("Novo recorde!")); else r.put(tr("Recorde: ")).num(best);
     resultCard(c, "Escapou!", l1, l2, newRecord, FISH);
     drawResultFooter(c);
   }
@@ -267,9 +268,9 @@ void TimingGame::draw(Canvas& c, ms_t now) {
     case Sub::Ready: {
       c.textCentered(34.f, "No Tempo Certo", FONT_L, ui::TEXT);
       c.textCentered(60.f, "Pare o tempo em:", FONT_M, ui::MUTED);
-      StrBuf s(b, sizeof b); s.fixed2(targetCs_).put(" s");
+      StrBuf s(b, sizeof b); s.fixed2(targetCs_).put(tr(" s"));
       c.textCentered(124.f, b, FONT_XXL, ui::acc(col));
-      StrBuf s2(b, sizeof b); s2.put("Recorde: "); if (best) s2.fixed2(best).put('%'); else s2.put("--");
+      StrBuf s2(b, sizeof b); s2.put(tr("Recorde: ")); if (best) s2.fixed2(best).put('%'); else s2.put("--");
       c.textCentered(152.f, b, FONT_S, ui::MUTED);
       ui::pill(c, (float)SCR_CX, 194.f, 220.f, 40.f, col, "Toque para começar", FONT_M, ui::INK);
       c.textCentered(232.f, "segure para sair", FONT_S, ui::DIM);
@@ -282,13 +283,13 @@ void TimingGame::draw(Canvas& c, ms_t now) {
       ui::progressRing(c, (float)SCR_CX, 128.f, 86.f, 8.f, (int)(frac * 1000.f), ui::acc(col));
       char d[2] = {(char)('0' + digit), 0};
       c.textCentered(160.f, d, FONT_CLOCK, ui::TEXT);
-      StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" s");
+      StrBuf s(b, sizeof b); s.put(tr("Alvo ")).fixed2(targetCs_).put(tr(" s"));
       c.text(14.f, 28.f, b, FONT_M, ui::MUTED);
       break;
     }
     case Sub::Running: {
       ms_t e = now >= goAt_ ? now - goAt_ : 0;
-      StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" s");
+      StrBuf s(b, sizeof b); s.put(tr("Alvo ")).fixed2(targetCs_).put(tr(" s"));
       c.textCentered(44.f, b, FONT_M, ui::MUTED);
       StrBuf s2(b, sizeof b); s2.fixed2((int64_t)(e / 10));
       c.textCentered(140.f, b, FONT_XXL, ui::TEXT);
@@ -301,14 +302,14 @@ void TimingGame::draw(Canvas& c, ms_t now) {
       int32_t diff = elapsed_ - target;
       int32_t pct = proximity100(elapsed_, target);
       Color pc = pct >= 9800 ? GOLD : pct >= 9000 ? col : ui::WARN;
-      StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" · Você ").fixed2(elapsed_ / 10);
+      StrBuf s(b, sizeof b); s.put(tr("Alvo ")).fixed2(targetCs_).put(tr(" · Você ")).fixed2(elapsed_ / 10);
       c.textCentered(34.f, b, FONT_M, ui::MUTED);
       StrBuf s2(b, sizeof b); s2.fixed2(pct).put('%');
       c.textCentered(106.f, b, FONT_XXL, ui::acc(pc));
-      StrBuf s3(b, sizeof b); s3.put("Diferença ").put(diff >= 0 ? '+' : '-').fixed2(tbAbs(diff) / 10).put(" s");
+      StrBuf s3(b, sizeof b); s3.put(tr("Diferença ")).put(diff >= 0 ? '+' : '-').fixed2(tbAbs(diff) / 10).put(tr(" s"));
       c.textCentered(140.f, b, FONT_M, ui::TEXT);
       StrBuf s4(b, sizeof b);
-      if (newRecord) s4.put("Novo recorde!"); else { s4.put("Recorde: "); if (best) s4.fixed2(best).put('%'); else s4.put("--"); }
+      if (newRecord) s4.put(tr("Novo recorde!")); else { s4.put(tr("Recorde: ")); if (best) s4.fixed2(best).put('%'); else s4.put("--"); }
       c.textCentered(166.f, b, FONT_S, newRecord ? GOLD : ui::MUTED);
       drawResultFooter(c);
       break;
@@ -330,7 +331,7 @@ void TimingGame::draw(Canvas& c, ms_t now) {
 void DiveGame::draw(Canvas& c, ms_t now) {
   char b[40];
   if (phase_ == GamePhase::Intro) {
-    StrBuf r(b, sizeof b); r.put("Recorde: ").num(best).put(" peixes");
+    StrBuf r(b, sizeof b); r.put(tr("Recorde: ")).num(best).put(tr(" peixes"));
     introCard(c, Icon::Level, 0x3EE6D0, "Mergulho do Tuba", "Arraste o dedo", "pegue peixes, fuja das águas-vivas", b);
     return;
   }
@@ -354,8 +355,8 @@ void DiveGame::draw(Canvas& c, ms_t now) {
   for (int i = 0; i < kLives; i++) c.heart(rx, 62.f + 30.f * (float)i, 20.f, i < lives_ ? (Color)0xFF5C9A : ui::SURF2);
   if (phase_ == GamePhase::Result) {
     char l1[32], l2[32];
-    StrBuf a(l1, sizeof l1); a.put("Peixes: ").num(score_);
-    StrBuf r(l2, sizeof l2); if (newRecord) r.put("Novo recorde!"); else r.put("Recorde: ").num(best);
+    StrBuf a(l1, sizeof l1); a.put(tr("Peixes: ")).num(score_);
+    StrBuf r(l2, sizeof l2); if (newRecord) r.put(tr("Novo recorde!")); else r.put(tr("Recorde: ")).num(best);
     resultCard(c, "Fim do mergulho", l1, l2, newRecord, 0x3EE6D0);
     drawResultFooter(c);
   }

@@ -1,4 +1,4 @@
-# TubaBot v3 no Mac (Apple Silicon ou Intel)
+# TubaBot v3.1 no Mac (Apple Silicon ou Intel)
 
 ## 1. Pré-requisitos
 
@@ -24,7 +24,9 @@ Abre com duplo clique, sem servidor. O TubaBot aparece **em paisagem (320×240)*
 
 - **Tela:** clique = toque; arraste = deslizar; vai-e-vem devagar = carinho; segurar = toque longo. Tocar no rosto mostra os controles (Pomodoro, Menu, Jogos), que somem sozinhos. Botões **BOOT** e **BOOT (3 s)** ao lado.
 - **Fábrica:** escolha Lite/Pro, cor física, cor das expressões e tema → "Gravar perfil e reiniciar como unidade nova". Mostra o texto exato que vai para a partição (o mesmo do `tools/fabrica.py`). Também "Restaurar padrão de fábrica" e "Apagar perfil".
-- **Controle:** alto-falante/microfone presentes, som do simulador, ferramentas de desenvolvedor.
+- **Reações:** ver cada reação lendária ("Ver") ou como seria a primeira vez com medalha ("Descobrir"), ajustar a afinidade de teste, rodar o sorteio natural ("Dia lendário agora"), rever a abertura, ir para 20:30 (sono) ou 08:00 (café), relógio "Tuba" animado, abrir a coleção.
+- **Atualização:** conectar um Wi-Fi de casa simulado, "Publicar v3.2.0" no servidor simulado e ver o aviso na tela (Agora / Em 1 hora / Esta noite), o download simulado e a prévia da telemetria.
+- **Controle:** idioma do aparelho (pt-BR, English, Español), alto-falante/microfone presentes, som do simulador, ferramentas de desenvolvedor.
 - **Som:** nível do ambiente, palma, barulho, música (ou o microfone do computador — só o nível).
 - **Energia:** bateria (só aparece no Pro).
 - **Tempo:** relógio virtual 1×/10×/60×/300× (jogos sempre 1×), saltos, enviar hora do computador. Sem RTC: ao "religar" a hora volta pela rede de casa (NTP simulado).
@@ -35,9 +37,10 @@ Recompilar o núcleo do simulador após editar `core/`: `make sim`.
 ## 3. Testes
 
 ```bash
-make test         # 62 testes nativos do núcleo
+make test         # 69 testes nativos do núcleo
 make crosscheck   # nativo × WebAssembly: telas idênticas bit a bit (requer node)
-make screens      # docs/telas.png com 53 telas reais (requer Pillow)
+make screens      # docs/telas.png com 61 telas reais (requer Pillow)
+make i18n-audit   # textos da tela sem tradução (inglês/espanhol)
 make e2e          # simulador e portal no Chromium via Playwright (npm i -D playwright)
 ```
 
@@ -50,7 +53,7 @@ Cada unidade = **firmware (igual para todas) + perfil de fábrica (Lite/Pro, cor
 1. Chrome ou Edge → <https://espressif.github.io/esptool-js/>
 2. Ligue a placa no USB-C, **Connect**, escolha a porta.
 3. Arquivos:
-   - `0x0` → `firmware/dist/tubabot-v3.0.0-completo.bin`
+   - `0x0` → `firmware/dist/tubabot-v3.1.0-completo.bin`
    - `0xFEF000` → `firmware/fabrica/fabrica-pro-vermelho.bin` (ou o perfil da unidade)
 4. **Program**. Ao terminar, aperte RESET.
 
@@ -68,7 +71,7 @@ make fabrica                             # regenera os 8 perfis padrão
 
 ### 4.3 Atualização pelo portal (OTA)
 
-Portal → Sistema → **Atualizar firmware** → `firmware/dist/tubabot-v3.0.0-app-ota.bin`. Preferências, recordes **e o perfil de fábrica** são mantidos.
+Portal → Sistema → **Atualizar firmware** → `firmware/dist/tubabot-v3.1.0-app-ota.bin`. Preferências, recordes **e o perfil de fábrica** são mantidos.
 
 ### Modo de gravação (BOOT)
 

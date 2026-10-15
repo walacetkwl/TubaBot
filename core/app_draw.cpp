@@ -111,7 +111,8 @@ void App::drawDock(ms_t now) {
 }
 
 void App::drawFaceScreen(ms_t now) {
-  face_.draw(canvas_, now, faceStyle());
+  if (scene_.active()) scene_.draw(canvas_, now, faceStyle());   // reação lendária no lugar do rosto
+  else face_.draw(canvas_, now, faceStyle());
   // progresso discreto do Pomodoro/timer: linha fina na borda inferior
   int pm = -1; Color col = C_TIMER;
   if (pomo_.active()) { pm = pomo_.permille(now); col = pomo_.phase() == PomoPhase::Focus ? C_POMO : C_SW; }
@@ -122,59 +123,146 @@ void App::drawFaceScreen(ms_t now) {
     canvas_.fillRect(0, SCR_H - 3, SCR_W * tbClamp(pm, 0, 1000) / 1000, 3, acc(col));
   }
   drawFaceOverlays(now);
-  drawDock(now);
+  if (!scene_.active()) drawDock(now);
 }
 
 // ── abertura ────────────────────────────────────────────────────────────────
+// Barbatana curva (bordas em curvas de Bézier, duas tonalidades) que surge do
+// mar, desliza com inclinação proporcional à velocidade, deixa rastro de espuma,
+// mergulha com respingos e dá lugar ao rosto. Tudo é função do tempo (sem estado).
+static Pt bez2(Pt a, Pt c, Pt b, float t) {
+  float u = 1.f - t;
+  return Pt{u * u * a.x + 2.f * u * t * c.x + t * t * b.x, u * u * a.y + 2.f * u * t * c.y + t * t * b.y};
+}
+
+static void drawFin(Canvas& cv, float ox, float oy, float sc, float lean) {
+  float sn = fsin(lean), cs = fcos(lean);
+  auto tf = [&](Pt p) {   // gira em torno da base (lean > 0 = ponta para a frente)
+    float x = p.x * sc, y = p.y * sc;
+    return Pt{ox + x * cs - y * sn, oy + x * sn + y * cs};
+  };
+  const Pt P0 = {20.f, 0.f}, C0 = {17.f, -40.f}, TIP = {-13.f, -54.f}, C1 = {-9.f, -20.f}, P2 = {-25.f, 2.f};
+  Pt v[24]; int n = 0;
+  for (int i = 0; i <= 10; i++) v[n++] = tf(bez2(P0, C0, TIP, (float)i / 10.f));       // bordo de ataque (convexo)
+  for (int i = 1; i <= 9; i++) v[n++] = tf(bez2(TIP, C1, P2, (float)i / 9.f));         // bordo de fuga (côncavo)
+  v[n++] = tf(Pt{-25.f, 18.f}); v[n++] = tf(Pt{20.f, 18.f});                            // base (sob a água)
+  cv.fillPolygon(v, n, 0x7F9CBB);
+  // metade da frente mais clara, separada por uma curva suave
+  n = 0;
+  for (int i = 0; i <= 10; i++) v[n++] = tf(bez2(P0, C0, TIP, (float)i / 10.f));
+  for (int i = 1; i <= 8; i++) v[n++] = tf(bez2(TIP, Pt{1.f, -24.f}, Pt{3.f, 18.f}, (float)i / 8.f));
+  v[n++] = tf(Pt{20.f, 18.f});
+  cv.fillPolygon(v, n, 0xDCE9F7);
+  // brilho no bordo de ataque
+  Pt h0 = tf(bez2(P0, C0, TIP, 0.25f)), h1 = tf(bez2(P0, C0, TIP, 0.75f));
+  cv.line(h0.x, h0.y, h1.x, h1.y, 2.2f * sc, 0xFFFFFF, 170);
+}
+
 void App::drawIntro(ms_t now) {
-  int t = (int)(now - bootAt_);
-  bool shortI = set_.shortIntro;
-  int finEnd = shortI ? 350 : 1100, textEnd = shortI ? 600 : 1750;
+  float T = (float)(set_.shortIntro ? INTRO_SHORT_MS : INTRO_FULL_MS);
+  float t = (float)(now - bootAt_);
+  float tA = T * 0.44f, tB = T * 0.63f;     // nadar | mergulhar | rosto
   Color eye = exprColorRgb(set_.eyeColor, set_.theme != 0);
-  // mar ao fundo
-  float wavePh = (float)t / 600.f;
-  for (int k = 0; k < 2; k++) {
-    float yb = 168.f + 16.f * (float)k;
-    Color col = k ? 0x0A3A6E : 0x1563A8;
-    float px = 0.f, py = yb + 6.f * fsin(wavePh + (float)k);
-    for (int x = 10; x <= SCR_W; x += 10) {
-      float y = yb + 6.f * fsin(wavePh + (float)k + (float)x * 0.03f);
-      canvas_.line(px, py, (float)x, y, 5.f, col);
-      px = (float)x; py = y;
+  float ph = t / 520.f;
+  float drop = t > tB ? 80.f * easeInOut((t - tB) / (T - tB) * 1.6f) : 0.f;   // o mar desce ao final
+  auto surf = [&](float x, float yb, float k) { return yb + drop + 5.f * fsin(ph + k + x * 0.03f) + 2.f * fsin(ph * 1.7f + x * 0.071f + k); };
+  auto sea = [&](float yb, float k, Color col, int a) {
+    Pt v[24]; int n = 0;
+    for (int x = 0; x <= SCR_W; x += 16) v[n++] = Pt{(float)x, surf((float)x, yb, k)};
+    v[n++] = Pt{W, H + 4.f}; v[n++] = Pt{0.f, H + 4.f};
+    canvas_.fillPolygon(v, n, col, a);
+  };
+  const float YB = 160.f, YF = 176.f;
+  sea(YB, 0.f, 0x1563A8, 150);                                 // mar ao fundo
+  // trajetória da barbatana: surge, desliza (rápido no meio, devagar nas pontas) e mergulha
+  auto finX = [&](float tt) { return tt < tA ? -24.f + 222.f * easeInOut(tt / tA) : 198.f + 34.f * easeOut((tt - tA) / (tB - tA)); };
+  float fx = finX(t);
+  float vx = (finX(t + 16.f) - finX(t - 16.f)) / 32.f;        // px/ms
+  float rise = 1.f - easeOut(t / (T * 0.16f));
+  float dive = t > tA ? fclamp((t - tA) / ((tB - tA) * 0.8f), 0.f, 1.f) : 0.f;
+  dive = dive * dive * (3.f - 2.f * dive);
+  float fy = YF + 8.f + 80.f * rise + 96.f * dive + 5.f * fsin(t / 150.f) * (1.f - dive);
+  float lean = -fclamp(vx * 0.7f, -0.38f, 0.38f) + 0.10f * fsin(t / 210.f) + 0.95f * dive;
+  if (t < tB && fy < H + 40.f) {
+    // rastro de espuma atrás da barbatana
+    for (int i = 1; i <= 6; i++) {
+      float wx = fx - 16.f - 13.f * (float)i - 4.f * fsin(t / 90.f + (float)i);
+      float a = (1.f - (float)i / 7.f) * (1.f - rise) * (1.f - dive) * fclamp(vx * 3.f, 0.f, 1.f);
+      canvas_.fillEllipse(wx, surf(wx, YF, 1.f) + 1.f, 9.f - 0.9f * (float)i, 2.8f, 0xFFFFFF, (int)(235.f * a));
     }
-    canvas_.fillRect(0, (int)yb + 5, SCR_W, 80, col, k ? 255 : 140);
+    drawFin(canvas_, fx, fy, 1.3f, lean);
   }
-  if (t < finEnd) {
-    float p = easeInOut((float)t / (float)finEnd);
-    float x = -50.f + (CX + 30.f) * p;
-    float bob = 3.f * fsin((float)t / 160.f);
-    Pt fin[3] = {{x, 170.f + bob}, {x + 40.f, 170.f + bob}, {x + 29.f, 120.f + bob}};
-    canvas_.fillPolygon(fin, 3, 0xDCE9F7);
-    return;
+  sea(YF, 1.f, 0x0A3A6E, 255);                                 // mar da frente (cobre a base da barbatana)
+  for (int x = 0; x < SCR_W; x += 8) {                          // crista clara das ondas
+    float y0 = surf((float)x, YF, 1.f), y1 = surf((float)(x + 8), YF, 1.f);
+    canvas_.line((float)x, y0, (float)(x + 8), y1, 1.6f, 0x5CC8FF, 150);
   }
-  if (t < textEnd) {
-    float p = (float)(t - finEnd) / (float)(textEnd - finEnd);
-    float sink = 46.f * easeInOut(p);
-    Pt fin[3] = {{CX - 30.f, 170.f + sink}, {CX + 10.f, 170.f + sink}, {CX - 1.f, 120.f + sink}};
-    canvas_.setClip(IRect(0, 0, SCR_W, 168));
-    canvas_.fillPolygon(fin, 3, 0xDCE9F7);
-    canvas_.resetClip();
-    for (int i = 0; i < 5; i++) canvas_.ring(CX - 24.f + 12.f * (float)i, 160.f - 70.f * p - 8.f * (float)(i % 2), 4.f + (float)(i % 3), 1.6f, 0xFFFFFF, (int)(200.f * (1.f - p)));
-    canvas_.textCentered(100.f, "TubaBot", FONT_XL, TEXT, (int)(255.f * easeOut(p)));
-    return;
+  if (t < tA + (tB - tA) * 0.4f) {                              // esteira em "V" e "bigode" de água na base
+    float k = (1.f - rise) * (1.f - dive) * fclamp(vx * 4.f, 0.2f, 1.f);
+    float bx = fx + 22.f, by = surf(bx, YF, 1.f) + 3.f;
+    canvas_.arc(bx, by + 2.f, 9.f, 2.4f, -1.3f, 1.6f, 0xFFFFFF, (int)(220.f * k));
+    for (int sgn = -1; sgn <= 1; sgn += 2) {
+      float x0 = fx - 8.f, x1 = fx - 70.f;
+      canvas_.line(x0, surf(x0, YF, 1.f) + 3.f, x1, surf(x1, YF, 1.f) + 3.f + 7.f * (float)sgn, 1.6f, 0xFFFFFF, (int)(120.f * k));
+    }
   }
-  int pe = t - textEnd;
-  int blink = pe < 260 ? 1000 - pe * 1000 / 260 : (pe < 360 ? (pe - 260) * 10 : (pe < 460 ? 1000 - (pe - 360) * 10 : 0));
+  // mergulho: respingos em parábola e anel de espuma
+  if (t > tA + (tB - tA) * 0.35f) {
+    float p = (t - (tA + (tB - tA) * 0.35f)) / ((T - tA) * 0.55f);
+    if (p < 1.f) {
+      float sx = finX(tA + (tB - tA) * 0.45f) + 4.f, sy = surf(sx, YF, 1.f);
+      canvas_.fillEllipse(sx, sy + 2.f, 10.f + 46.f * p, 3.f + 7.f * p, 0xFFFFFF, (int)(170.f * (1.f - p)));
+      canvas_.fillEllipse(sx, sy + 2.f, 6.f + 40.f * p, 2.f + 5.f * p, 0x0A3A6E, (int)(255.f * (1.f - p)));
+      for (int i = 0; i < 9; i++) {
+        float ang = -1.25f + 2.5f * (float)i / 8.f;
+        float sp = 0.9f + 0.25f * (float)(i % 3);
+        float dx = 70.f * sp * fsin(ang) * p, dy = -95.f * sp * fcos(ang) * p + 150.f * p * p;
+        float r = 2.2f + (float)(i % 3) * 0.9f;
+        canvas_.fillCircle(sx + dx, sy + dy, r * (1.f - 0.5f * p), i % 2 ? (Color)0xFFFFFF : (Color)0xBFE6FF, (int)(235.f * (1.f - p)));
+      }
+    }
+  }
+  // bolhas subindo onde mergulhou
+  if (t > tA && t < T * 0.9f) {
+    float p = (t - tA) / (T * 0.9f - tA);
+    for (int i = 0; i < 5; i++) {
+      float q = fclamp(p * 1.4f - 0.08f * (float)i, 0.f, 1.f);
+      if (q <= 0.f || q >= 1.f) continue;
+      float bx = 214.f + 10.f * fsin(q * 9.f + (float)i * 1.7f) + 7.f * (float)(i - 2);
+      canvas_.ring(bx, YF + 40.f + drop - 46.f * q, 2.5f + (float)(i % 3), 1.4f, 0xFFFFFF, (int)(200.f * (1.f - q)));
+    }
+  }
+  // nome
+  if (t > tA + (tB - tA) * 0.3f) {
+    float p = fclamp((t - (tA + (tB - tA) * 0.3f)) / ((tB - tA) * 0.9f), 0.f, 1.f);
+    float fade = t > tB ? 1.f - fclamp((t - tB) / ((T - tB) * 0.22f), 0.f, 1.f) : 1.f;
+    int a = (int)(255.f * fclamp(p * 1.6f, 0.f, 1.f) * fade);
+    if (a > 0) {
+      canvas_.textCentered(96.f + 18.f * (1.f - easeBack(p)), "TubaBot", FONT_XL, TEXT, a);
+      canvas_.textCentered(120.f + 18.f * (1.f - easeBack(p)), "TubaLabs", FONT_S, MUTED, a * 3 / 4);
+    }
+  }
+  if (t <= tB) return;
+  // rosto: sobe da água abrindo os olhos
+  float pe = t - tB - (T - tB) * 0.2f;
+  if (pe <= 0.f) return;
+  float pc = fclamp(pe / ((T - tB) * 0.4f), 0.f, 1.f);
+  float sp = T / (float)INTRO_FULL_MS;
+  int open = pe < 260.f * sp ? 1000 - (int)(pe * 1000.f / (260.f * sp)) : 0;
+  int blink2 = pe > 520.f * sp && pe < 720.f * sp ? 1000 - (int)(fabsf_(pe - 620.f * sp) * 10.f / sp) : 0;
   FaceDef f = faceDef(baseExpr_);
   f.extras = FX_NONE;
-  FaceXf xf; xf.s = 0.5f; xf.cy = 84.f;
-  FaceRenderer::drawFace(canvas_, f, faceStyle(), now, xf, 0, 0, tbClamp(blink, 0, 1000), 0.f);
-  if (pe > 500 || shortI) {
+  FaceXf xf; xf.s = 0.5f * (0.85f + 0.15f * easeBack(pc)); xf.cy = 88.f + 26.f * (1.f - easeOut(pc));
+  canvas_.setGlobalAlpha((int)(255.f * fclamp(pc * 1.8f, 0.f, 1.f)));
+  FaceRenderer::drawFace(canvas_, f, faceStyle(), now, xf, 0, 0, tbClamp(tbMax(open, blink2), 0, 1000), 0.f);
+  canvas_.setGlobalAlpha(255);
+  if (pc > 0.6f || set_.shortIntro) {
     char b[48]; StrBuf s(b, sizeof b);
-    s.put("Oi");
+    s.put(tr("Oi"));
     if (set_.nickname[0]) s.put(", ").put(set_.nickname);
     s.put('!');
-    canvas_.textCentered(156.f, b, FONT_L, set_.theme ? (Color)0xFFFFFF : eye);
+    int a = set_.shortIntro ? 255 : (int)(255.f * fclamp((pc - 0.6f) * 2.5f, 0.f, 1.f));
+    canvas_.textCentered(166.f, b, FONT_L, set_.theme ? TEXT : eye, a);
   }
 }
 
@@ -209,18 +297,17 @@ void App::drawClock(ms_t now) {
     canvas_.line(cx - 14.f * fsin(as), cy + 14.f * fcos(as), cx + 88.f * fsin(as), cy - 88.f * fcos(as), 2.f, accent);
     canvas_.fillCircle(cx, cy, 6.f, accent);
     canvas_.fillCircle(cx, cy, 2.5f, BG);
-    StrBuf d(b, sizeof b); d.put(WEEKDAYS_FULL[L.weekday]);
+    StrBuf d(b, sizeof b); d.put(tr(WEEKDAYS_FULL[L.weekday]));
     canvas_.text(274.f, 106.f, b, FONT_M, MUTED, 255, Align::Center);
-    StrBuf d2(b, sizeof b); d2.num(L.day).put(' ').put(MONTHS[L.month - 1]);
+    StrBuf d2(b, sizeof b); d2.num(L.day).put(' ').put(tr(MONTHS[L.month - 1]));
     canvas_.text(274.f, 136.f, b, FONT_L, TEXT, 255, Align::Center);
   } else if (set_.watchFace == 2) {
     // "Tuba": rostinho à esquerda, hora à direita
-    FaceXf xf; xf.s = 0.40f; xf.cx = 84.f; xf.cy = 116.f;
-    FaceDef f = faceDef(face_.shown()); f.extras = (uint16_t)(f.extras & (FX_BLUSH | FX_ZZZ));
-    FaceRenderer::drawFace(canvas_, f, faceStyle(), now, xf);
+    // rosto vivo (pisca, olha em volta, confere a hora, faz caretinhas)
+    face_.drawAt(canvas_, now, faceStyle(), 84.f, 116.f, 0.40f, (uint16_t)(FX_BLUSH | FX_ZZZ | FX_SPARKLE));
     StrBuf s(b, sizeof b); fmtTime(s, L.hour, L.minute, set_.clock24h);
     canvas_.text(232.f, 130.f, b, FONT_XXL, TEXT, 255, Align::Center);
-    StrBuf d(b, sizeof b); d.put(WEEKDAYS[L.weekday]).put(", ").num(L.day).put(' ').put(MONTHS[L.month - 1]);
+    StrBuf d(b, sizeof b); d.put(tr(WEEKDAYS[L.weekday])).put(", ").num(L.day).put(' ').put(tr(MONTHS[L.month - 1]));
     canvas_.text(232.f, 162.f, b, FONT_M, MUTED, 255, Align::Center);
   } else {
     // digital
@@ -229,7 +316,7 @@ void App::drawClock(ms_t now) {
     const Font& f = Canvas::fitFont(b, 300, fonts, 2);
     canvas_.textCentered(140.f, b, f, TEXT);
     if (!set_.clock24h) canvas_.textCentered(44.f, L.hour < 12 ? "AM" : "PM", FONT_M, accent);
-    StrBuf d(b, sizeof b); d.put(WEEKDAYS_FULL[L.weekday]).put(", ").num(L.day).put(' ').put(MONTHS[L.month - 1]);
+    StrBuf d(b, sizeof b); d.put(tr(WEEKDAYS_FULL[L.weekday])).put(", ").num(L.day).put(' ').put(tr(MONTHS[L.month - 1]));
     canvas_.textCentered(180.f, b, FONT_M, MUTED);
     float p = ((float)L.second + (float)ms / 1000.f) / 60.f;
     canvas_.fillRoundRect(80.f, 198.f, 160.f, 4.f, 2.f, SURF2);
@@ -246,12 +333,12 @@ void App::drawToday(ms_t now) {
     int h = clock_.local(now, TZ_TABLE[set_.tzIndex].offsetMin).hour;
     greet = h < 5 ? "Boa noite" : h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
   }
-  StrBuf g(b, sizeof b); g.put(greet); if (set_.nickname[0]) g.put(", ").put(set_.nickname);
+  StrBuf g(b, sizeof b); g.put(tr(greet)); if (set_.nickname[0]) g.put(", ").put(set_.nickname);
   const Font* fonts[2] = {&FONT_L, &FONT_M};
   canvas_.text(16.f, 30.f, b, Canvas::fitFont(b, 200, fonts, 2), TEXT);
   if (clock_.valid()) {
     CivilClock::Local L = clock_.local(now, TZ_TABLE[set_.tzIndex].offsetMin);
-    StrBuf d(b, sizeof b); d.put(WEEKDAYS[L.weekday]).put(", ").num(L.day).put(' ').put(MONTHS[L.month - 1]);
+    StrBuf d(b, sizeof b); d.put(tr(WEEKDAYS[L.weekday])).put(", ").num(L.day).put(' ').put(tr(MONTHS[L.month - 1]));
     canvas_.text(W - 16.f, 30.f, b, FONT_S, MUTED, 255, Align::Right);
   }
   float y = 64.f;
@@ -264,29 +351,29 @@ void App::drawToday(ms_t now) {
     y += 44.f;
   };
   if (set_.weatherEnabled && weather_.valid) {
-    char t[32]; StrBuf s(t, sizeof t); s.num((weather_.tempC10 + (weather_.tempC10 >= 0 ? 5 : -5)) / 10).put("° · ").put(weatherText(weather_.code));
+    char t[32]; StrBuf s(t, sizeof t); s.num((weather_.tempC10 + (weather_.tempC10 >= 0 ? 5 : -5)) / 10).put("° · ").put(tr(weatherText(weather_.code)));
     row(weatherIcon(weather_.code, weather_.isDay), C_WEATHER, t, set_.weatherCity == 255 ? "local próprio" : CITY_TABLE[set_.weatherCity].name);
   }
   int mins = 0, na = nextAlarmIndex(now, &mins);
   if (na >= 0) {
     char t[32]; StrBuf s(t, sizeof t); fmtTime(s, set_.alarms[na].hour, set_.alarms[na].minute, set_.clock24h); s.put(" · ").put(set_.alarms[na].label);
-    char u[32]; StrBuf su(u, sizeof u); su.put("em "); formatDuration(su, (ms_t)mins * 60000, false);
+    char u[32]; StrBuf su(u, sizeof u); su.put(tr("em ")); formatDuration(su, (ms_t)mins * 60000, false);
     row(Icon::Alarm, C_ALARM, t, u);
   }
   if (pomo_.active() && y < 200.f) {
-    char t[32]; StrBuf s(t, sizeof t); s.put(pomo_.phase() == PomoPhase::Focus ? "Foco " : "Pausa "); formatDuration(s, pomo_.remainingMs(now), true);
+    char t[32]; StrBuf s(t, sizeof t); s.put(tr(pomo_.phase() == PomoPhase::Focus ? "Foco " : "Pausa ")); formatDuration(s, pomo_.remainingMs(now), true);
     row(Icon::Tomato, C_POMO, t, pomo_.state() == RunState::Paused ? "pausado" : nullptr);
   }
   for (int i = 0; i < kTimers && y < 200.f; i++) if (timers_[i].state() == RunState::Running || timers_[i].state() == RunState::Paused) {
-    char t[32]; StrBuf s(t, sizeof t); s.put("Timer ").num(i + 1).put("  "); formatDuration(s, timers_[i].remainingMs(now), true);
+    char t[32]; StrBuf s(t, sizeof t); s.put(tr("Timer ")).num(i + 1).put("  "); formatDuration(s, timers_[i].remainingMs(now), true);
     row(Icon::Timer, C_TIMER, t, timers_[i].state() == RunState::Paused ? "pausado" : nullptr);
   }
   if (y < 110.f) {
-    char t[40]; StrBuf s(t, sizeof t); s.put("humor ").num((P().mood + 100) / 2).put('%');
+    char t[40]; StrBuf s(t, sizeof t); s.put(tr("humor ")).num((P().mood + 100) / 2).put('%');
     row(Icon::Heart, C_STATS, "Tudo tranquilo por aqui", t);
   }
   if (caps_.battery && power_.known && power_.battery && y < 200.f) {
-    char t[24]; StrBuf s(t, sizeof t); s.put("Bateria ").num(power_.percent).put('%');
+    char t[24]; StrBuf s(t, sizeof t); s.put(tr("Bateria ")).num(power_.percent).put('%');
     row(Icon::Bolt, C_VOL, t, power_.charging ? "carregando" : nullptr);
   }
   if (now - screenAt_ < 2500) pageDots(canvas_, 3, 2);
@@ -448,7 +535,7 @@ void App::drawStopwatch(ms_t now) {
   if (e) canvas_.fillRoundRect(60.f, 136.f, 4.f + 196.f * p, 4.f, 2.f, col);
   if (sw_.limitHit()) canvas_.textCentered(164.f, "Limite atingido", FONT_S, WARN);
   else if (lapN_) {
-    StrBuf l(b, sizeof b); l.put("volta ").num(lapN_).put("  "); formatDuration(l, laps_[lapN_ - 1], false);
+    StrBuf l(b, sizeof b); l.put(tr("volta ")).num(lapN_).put("  "); formatDuration(l, laps_[lapN_ - 1], false);
     canvas_.textCentered(164.f, b, FONT_S, MUTED);
   }
   button(B_RESET, CX - 74.f, 204.f, 20.f, SURF2, Icon::Reset, TEXT);
@@ -469,11 +556,11 @@ void App::drawAlarms(ms_t now) {
     StrBuf s(b, sizeof b); fmtTime(s, a.hour, a.minute, true);
     canvas_.text(26.f, y + 8.f, b, FONT_L, a.enabled ? TEXT : DIM);
     StrBuf d(b, sizeof b);
-    if (!a.days) d.put("uma vez");
-    else if (a.days == 0x7F) d.put("todo dia");
-    else if (a.days == 0x3E) d.put("seg a sex");
-    else if (a.days == 0x41) d.put("fim de semana");
-    else for (int k = 0; k < 7; k++) if ((a.days >> k) & 1) d.put(WEEKDAYS[k]).put(' ');
+    if (!a.days) d.put(tr("uma vez"));
+    else if (a.days == 0x7F) d.put(tr("todo dia"));
+    else if (a.days == 0x3E) d.put(tr("seg a sex"));
+    else if (a.days == 0x41) d.put(tr("fim de semana"));
+    else for (int k = 0; k < 7; k++) if ((a.days >> k) & 1) d.put(tr(WEEKDAYS[k])).put(' ');
     canvas_.text(104.f, y - 2.f, a.label, FONT_S, a.enabled ? TEXT : DIM);
     canvas_.text(104.f, y + 15.f, b, FONT_S, MUTED);
     hitRect(B_ALARM_OPEN0 + i, 12.f, y - 24.f, W - 90.f, 48.f);
@@ -498,12 +585,18 @@ void App::drawAlarmEdit(ms_t now) {
   button(B_AL_H_MINUS, CX - 58.f, 164.f, 15.f, SURF2, Icon::Minus, TEXT);
   button(B_AL_M_PLUS, CX + 58.f, 62.f, 15.f, SURF2, Icon::Plus, TEXT);
   button(B_AL_M_MINUS, CX + 58.f, 164.f, 15.f, SURF2, Icon::Minus, TEXT);
-  static const char* const D[7] = {"D", "S", "T", "Q", "Q", "S", "S"};
   for (int k = 0; k < 7; k++) {
     float x = 40.f + 32.f * (float)k;
     bool on = (a.days >> k) & 1;
     canvas_.fillCircle(x, 212.f, 13.f, on ? col : SURF2);
-    canvas_.text(x, 217.f, D[k], FONT_S, on ? INK : MUTED, 255, Align::Center);
+    // inicial do dia no idioma atual (D S T Q Q S S / S M T W T F S / D L M M J V S)
+    char ini[5] = {0};
+    const char* wd = tr(WEEKDAYS[k]);
+    int n = ((uint8_t)wd[0] & 0xE0) == 0xC0 ? 2 : 1;
+    for (int i = 0; i < n; i++) ini[i] = wd[i];
+    if (ini[0] >= 'a' && ini[0] <= 'z') ini[0] = (char)(ini[0] - 32);
+    if ((uint8_t)ini[0] == 0xC3 && (uint8_t)ini[1] >= 0xA0) ini[1] = (char)((uint8_t)ini[1] - 0x20);  // á -> Á
+    canvas_.text(x, 217.f, ini, FONT_S, on ? INK : MUTED, 255, Align::Center);
     hit(B_AL_DAY0 + k, x, 212.f, 16.f);
   }
   button(B_AL_DONE, W - 34.f, 120.f, 22.f, col, Icon::Check, INK);
@@ -528,7 +621,7 @@ void App::drawExpressions(ms_t now) {
     hit(B_EXPR_USE, CX, 222.f, 30.f);
   }
   int unlocked = 0; for (int i = 0; i < UNL_COUNT; i++) if ((Pr.unlocked >> i) & 1u) unlocked++;
-  char b[24]; StrBuf s(b, sizeof b); s.put("Coleção ").num(unlocked).put('/').num(UNL_COUNT);
+  char b[24]; StrBuf s(b, sizeof b); s.put(tr("Coleção ")).num(unlocked).put('/').num(UNL_COUNT);
   canvas_.text(W - 14.f, 26.f, b, FONT_S, DIM, 255, Align::Right);
   button(B_EXPR_PREV, 26.f, CY, 16.f, SURF, Icon::Back, MUTED);
   button(B_EXPR_NEXT, W - 26.f, CY, 16.f, SURF, Icon::Play, MUTED);
@@ -669,18 +762,18 @@ void App::drawWeather(ms_t now) {
   StrBuf t(b, sizeof b); t.num((weather_.tempC10 + (weather_.tempC10 >= 0 ? 5 : -5)) / 10).put("°");
   canvas_.text(128.f, 116.f, b, FONT_XXL, TEXT);
   canvas_.text(130.f, 142.f, weatherText(weather_.code), FONT_M, col);
-  StrBuf m(b, sizeof b); m.put("máx ").num(weather_.hiC10 / 10).put("°  mín ").num(weather_.loC10 / 10).put("°  umid. ").num(weather_.humidity).put('%');
+  StrBuf m(b, sizeof b); m.put(tr("máx ")).num(weather_.hiC10 / 10).put(tr("°  mín ")).num(weather_.loC10 / 10).put(tr("°  umid. ")).num(weather_.humidity).put('%');
   canvas_.text(130.f, 162.f, b, FONT_S, MUTED);
   static const char* const DAY[3] = {"hoje", "amanhã", "depois"};
   for (int i = 1; i < weather_.nDays && i < 3; i++) {
     float x = 30.f + 144.f * (float)(i - 1);
     canvas_.fillRoundRect(x - 18.f, 178.f, 136.f, 34.f, 12.f, SURF);
     drawIcon(canvas_, weatherIcon(weather_.days[i].code, true), x, 195.f, 20.f, TEXT);
-    StrBuf d(b, sizeof b); d.put(DAY[i]).put(' ').num(weather_.days[i].hiC10 / 10).put("°/").num(weather_.days[i].loC10 / 10).put("°");
+    StrBuf d(b, sizeof b); d.put(tr(DAY[i])).put(' ').num(weather_.days[i].hiC10 / 10).put("°/").num(weather_.days[i].loC10 / 10).put("°");
     canvas_.text(x + 16.f, 200.f, b, FONT_S, TEXT);
   }
-  StrBuf c(b, sizeof b); c.put(set_.weatherCity == 255 ? "local próprio" : CITY_TABLE[set_.weatherCity].name).put(" · há ");
-  ms_t age = now - weather_.updatedAt; c.num((int64_t)(age / 60000)).put(" min · Open-Meteo");
+  StrBuf c(b, sizeof b); c.put(tr(set_.weatherCity == 255 ? "local próprio" : CITY_TABLE[set_.weatherCity].name)).put(tr(" · há "));
+  ms_t age = now - weather_.updatedAt; c.num((int64_t)(age / 60000)).put(tr(" min · Open-Meteo"));
   canvas_.textCentered(232.f, b, FONT_S, DIM);
 }
 
@@ -702,11 +795,11 @@ void App::drawStats(ms_t now) {
   bar(92.f, "Energia", energy_ * 10, OK);
   bar(118.f, "Vínculo", Pr.bond, C_STATS);
   int unl = 0; for (int i = 0; i < UNL_COUNT; i++) if ((Pr.unlocked >> i) & 1u) unl++;
-  StrBuf s(b, sizeof b); s.unum(Pr.pets).put(" carinhos · ").unum(Pr.pomodorosDone).put(" pomodoros");
+  StrBuf s(b, sizeof b); s.unum(Pr.pets).put(tr(" carinhos · ")).unum(Pr.pomodorosDone).put(tr(" pomodoros"));
   canvas_.text(140.f, 156.f, b, FONT_S, TEXT);
-  StrBuf s2(b, sizeof b); s2.unum(Pr.gamesPlayed).put(" partidas");
+  StrBuf s2(b, sizeof b); s2.unum(Pr.gamesPlayed).put(tr(" partidas"));
   canvas_.text(140.f, 180.f, b, FONT_S, TEXT);
-  StrBuf s3(b, sizeof b); s3.num(unl).put('/').num(UNL_COUNT).put(" expressões");
+  StrBuf s3(b, sizeof b); s3.num(unl).put('/').num(UNL_COUNT).put(tr(" expressões"));
   canvas_.text(140.f, 204.f, b, FONT_S, TEXT);
 }
 
@@ -726,7 +819,7 @@ void App::drawConfigPages(bool firstUse, ms_t now) {
     canvas_.text(tx, 72.f, "1. Aponte a câmera", FONT_S, MUTED);
     canvas_.text(tx, 90.f, "ou entre na rede:", FONT_S, MUTED);
     canvas_.text(tx, 116.f, ns.apSsid, FONT_M, TEXT);
-    StrBuf p(b, sizeof b); p.put("senha ").put(ns.apPass);
+    StrBuf p(b, sizeof b); p.put(tr("senha ")).put(ns.apPass);
     canvas_.text(tx, 140.f, b, FONT_S, TEXT);
   } else if (page == 1) {
     const char* ip = ns.apIp[0] ? ns.apIp : "192.168.4.1";
@@ -738,14 +831,14 @@ void App::drawConfigPages(bool firstUse, ms_t now) {
   } else {
     drawIcon(canvas_, Icon::Wifi, 86.f, 110.f, 60.f, ns.apActive ? col : DIM);
     canvas_.text(tx, 72.f, ns.mdns, FONT_S, MUTED);
-    StrBuf s(b, sizeof b); s.put("Casa: ");
-    if (!ns.staConfigured) s.put("não usada");
+    StrBuf s(b, sizeof b); s.put(tr("Casa: "));
+    if (!ns.staConfigured) s.put(tr("não usada"));
     else if (ns.sta == StaState::Connected) s.put(ns.staIp);
-    else if (ns.sta == StaState::Connecting) s.put("conectando");
-    else s.put("sem conexão");
+    else if (ns.sta == StaState::Connecting) s.put(tr("conectando"));
+    else s.put(tr("sem conexão"));
     canvas_.text(tx, 100.f, b, FONT_M, TEXT);
     if (!ns.apActive) canvas_.text(tx, 124.f, "Rede própria fechada", FONT_S, WARN);
-    else if (ns.apSecondsLeft) { StrBuf s2(b, sizeof b); s2.put("fecha em "); formatDuration(s2, (ms_t)ns.apSecondsLeft * 1000, false); canvas_.text(tx, 124.f, b, FONT_S, MUTED); }
+    else if (ns.apSecondsLeft) { StrBuf s2(b, sizeof b); s2.put(tr("fecha em ")); formatDuration(s2, (ms_t)ns.apSecondsLeft * 1000, false); canvas_.text(tx, 124.f, b, FONT_S, MUTED); }
   }
   pageDots(canvas_, 3, page, 228.f);
   button(B_PAGE_NEXT, W - 24.f, 228.f - 52.f, 15.f, SURF, Icon::Play, MUTED);
@@ -763,29 +856,30 @@ void App::drawInfo(ms_t now) {
   const Progress& Pr = P();
   switch (infoPage_ % 7) {
     case 0: {
-      StrBuf t(b, sizeof b); t.put("TubaBot ").put(modelName(fac_.model));
+      StrBuf t(b, sizeof b); t.put(tr("TubaBot ")).put(modelName(fac_.model));
       canvas_.textCentered(y + 4.f, b, FONT_L, TEXT); y += 34.f;
-      StrBuf s(b, sizeof b); s.put("versão ").put(TB_VERSION); line(b, MUTED);
-      StrBuf u(b, sizeof b); u.put("ligado há "); formatDuration(u, now - bootAt_, false); line(b);
+      StrBuf s(b, sizeof b); s.put(tr("versão ")).put(TB_VERSION); line(b, MUTED);
+      StrBuf u(b, sizeof b); u.put(tr("ligado há ")); formatDuration(u, now - bootAt_, false); line(b);
       line("ESP32-S3 · tela 2,8\" 320×240", MUTED);
       if (recovered_) line("dados restaurados ao padrão", WARN);
+      pillButton(B_INFO_UPDATE, CX, 198.f, 210.f, 30.f, set_.updVersion[0] ? ACCENT : SURF2, "Buscar atualizações", set_.updVersion[0] ? ON_ACCENT : TEXT);
       break;
     }
     case 1: {
-      if (!fac_.present) { line("perfil de fábrica não gravado", WARN); line("usando padrões genéricos (Lite)", MUTED); if (facWhy_) { StrBuf w(b, sizeof b); w.put("motivo: ").put(facWhy_); line(b, DIM); } break; }
-      StrBuf m(b, sizeof b); m.put("modelo: ").put(modelName(fac_.model)); line(b);
-      StrBuf c(b, sizeof b); c.put("cor física: ").put(BODIES[fac_.body].name); line(b);
-      StrBuf e(b, sizeof b); e.put("expressão padrão: ").put(EXPR_COLORS[fac_.exprColor].name); line(b);
-      StrBuf t(b, sizeof b); t.put("tema padrão: ").put(fac_.theme ? "claro" : "escuro"); line(b);
-      if (fac_.serial[0]) { StrBuf s(b, sizeof b); s.put("série: ").put(fac_.serial); line(b, MUTED); }
-      if (facWhy_) { StrBuf w(b, sizeof b); w.put("aviso: ").put(facWhy_); line(b, WARN); }
+      if (!fac_.present) { line("perfil de fábrica não gravado", WARN); line("usando padrões genéricos (Lite)", MUTED); if (facWhy_) { StrBuf w(b, sizeof b); w.put(tr("motivo: ")).put(facWhy_); line(b, DIM); } break; }
+      StrBuf m(b, sizeof b); m.put(tr("modelo: ")).put(modelName(fac_.model)); line(b);
+      StrBuf c(b, sizeof b); c.put(tr("cor física: ")).put(tr(BODIES[fac_.body].name)); line(b);
+      StrBuf e(b, sizeof b); e.put(tr("expressão padrão: ")).put(tr(EXPR_COLORS[fac_.exprColor].name)); line(b);
+      StrBuf t(b, sizeof b); t.put(tr("tema padrão: ")).put(tr(fac_.theme ? "claro" : "escuro")); line(b);
+      if (fac_.serial[0]) { StrBuf s(b, sizeof b); s.put(tr("série: ")).put(fac_.serial); line(b, MUTED); }
+      if (facWhy_) { StrBuf w(b, sizeof b); w.put(tr("aviso: ")).put(facWhy_); line(b, WARN); }
       break;
     }
     case 2: {
       NetStatus ns; plat_.netStatus(ns);
       line(ns.apActive ? "rede própria: ligada" : "rede própria: desligada");
-      StrBuf s(b, sizeof b); s.put("casa: ");
-      if (!ns.staConfigured) s.put("não usada"); else if (ns.sta == StaState::Connected) s.put(ns.staIp); else s.put("desconectada");
+      StrBuf s(b, sizeof b); s.put(tr("casa: "));
+      if (!ns.staConfigured) s.put(tr("não usada")); else if (ns.sta == StaState::Connected) s.put(ns.staIp); else s.put(tr("desconectada"));
       line(b);
       line(ns.mdns, MUTED);
       line("funciona offline", MUTED);
@@ -803,39 +897,39 @@ void App::drawInfo(ms_t now) {
       break;
     case 4: {
       SysInfo si; plat_.sysInfo(si);
-      StrBuf s(b, sizeof b); s.put("RAM livre ").unum(si.heapFree / 1024).put(" KB"); line(b);
-      StrBuf p(b, sizeof b); p.put("PSRAM livre ").unum(si.psramFree / 1024).put(" KB"); line(b);
-      StrBuf f(b, sizeof b); f.put("flash livre ").unum(si.sketchFree / 1024).put(" KB"); line(b);
+      StrBuf s(b, sizeof b); s.put(tr("RAM livre ")).unum(si.heapFree / 1024).put(tr(" KB")); line(b);
+      StrBuf p(b, sizeof b); p.put(tr("PSRAM livre ")).unum(si.psramFree / 1024).put(tr(" KB")); line(b);
+      StrBuf f(b, sizeof b); f.put(tr("flash livre ")).unum(si.sketchFree / 1024).put(tr(" KB")); line(b);
       line(si.simulated ? "simulador" : si.chip, MUTED);
       break;
     }
     case 5: {
-      StrBuf s(b, sizeof b); s.put("toque: ").unum(input_.rawEdges()).put(" bordas").put(input_.stuck() ? " (preso!)" : ""); line(b);
+      StrBuf s(b, sizeof b); s.put(tr("toque: ")).unum(input_.rawEdges()).put(tr(" bordas")).put(input_.stuck() ? " (preso!)" : ""); line(b);
       StrBuf a(b, sizeof b);
-      if (!caps_.mic) a.put("microfone: ausente");
-      else if (!set_.micReactions) a.put("som: desligado");
-      else if (sound_.active()) a.put("som: nível ").num(sound_.level()).put(" (base ").num(sound_.baseline()).put(')');
-      else a.put("som: sem leitura");
+      if (!caps_.mic) a.put(tr("microfone: ausente"));
+      else if (!set_.micReactions) a.put(tr("som: desligado"));
+      else if (sound_.active()) a.put(tr("som: nível ")).num(sound_.level()).put(tr(" (base ")).num(sound_.baseline()).put(')');
+      else a.put(tr("som: sem leitura"));
       line(b);
       if (caps_.battery) {
         StrBuf p(b, sizeof b);
-        if (power_.known && power_.battery) p.put("bateria: ").num(power_.percent).put("% ").num(power_.mv).put(" mV");
-        else p.put("bateria: sem leitura");
+        if (power_.known && power_.battery) p.put(tr("bateria: ")).num(power_.percent).put("% ").num(power_.mv).put(tr(" mV"));
+        else p.put(tr("bateria: sem leitura"));
         line(b);
       } else line("bateria: não se aplica (Lite)", MUTED);
       if (caps_.imu) {
         StrBuf m(b, sizeof b);
-        if (motion_.active()) m.put("movimento: ").num(motion_.lpX()).put(' ').num(motion_.lpY()).put(' ').num(motion_.lpZ()).put(" mg");
-        else m.put("movimento: sem leitura");
+        if (motion_.active()) m.put(tr("movimento: ")).num(motion_.lpX()).put(' ').num(motion_.lpY()).put(' ').num(motion_.lpZ()).put(tr(" mg"));
+        else m.put(tr("movimento: sem leitura"));
         line(b);
       }
       break;
     }
     default: {
-      StrBuf s(b, sizeof b); s.put("Pula: ").num(Pr.jumpBest).put("   Bote: ").num(Pr.fishBest).put("   Mergulho: ").num(Pr.diveBest); line(b);
-      StrBuf r(b, sizeof b); r.put("Reflexo: "); if (Pr.reflexBestMs) r.num(Pr.reflexBestMs).put(" ms"); else r.put("--"); line(b);
-      StrBuf t(b, sizeof b); t.put("Tempo Certo: "); if (Pr.timingBestPct100) t.fixed2(Pr.timingBestPct100).put('%'); else t.put("--"); line(b);
-      StrBuf c(b, sizeof b); c.put("carinhos ").unum(Pr.pets).put(" · boops ").unum(Pr.boops); line(b, MUTED);
+      StrBuf s(b, sizeof b); s.put(tr("Pula: ")).num(Pr.jumpBest).put(tr("   Bote: ")).num(Pr.fishBest).put(tr("   Mergulho: ")).num(Pr.diveBest); line(b);
+      StrBuf r(b, sizeof b); r.put(tr("Reflexo: ")); if (Pr.reflexBestMs) r.num(Pr.reflexBestMs).put(tr(" ms")); else r.put("--"); line(b);
+      StrBuf t(b, sizeof b); t.put(tr("Tempo Certo: ")); if (Pr.timingBestPct100) t.fixed2(Pr.timingBestPct100).put('%'); else t.put("--"); line(b);
+      StrBuf c(b, sizeof b); c.put(tr("carinhos ")).unum(Pr.pets).put(tr(" · boops ")).unum(Pr.boops); line(b, MUTED);
       break;
     }
   }
@@ -863,6 +957,70 @@ void App::drawConfirm(ms_t now) {
   button(B_OK, CX + 64.f, 196.f, 24.f, BAD, Icon::Check, 0xFFFFFF);
 }
 
+void App::pillButton(int id, float cx, float cy, float w, float h, Color bg, const char* label, Color fg) {
+  bool pr = pressedHit_ == id;
+  const char* t = tr(label);
+  const Font* fonts[2] = {&FONT_M, &FONT_S};
+  pill(canvas_, cx, cy, w, h, pr ? mixColor(bg, TEXT, 50) : bg, t, Canvas::fitFont(t, (int)w - 16, fonts, 2), fg);
+  hitRect(id, cx - w * 0.5f, cy - h * 0.5f - 4.f, w, h + 8.f);
+}
+
+// ── atualizações ────────────────────────────────────────────────────────────
+void App::drawUpdate(ms_t now) {
+  char b[64];
+  drawBackChevron(tr("Atualizações"), acc(C_SW));
+  bool pend = set_.updVersion[0] != 0;
+  canvas_.fillCircle(CX, 76.f, 24.f, pend ? ACCENT : SURF2);
+  drawIcon(canvas_, Icon::Download, CX, 76.f + 2.f * fsin((float)(now % 1600) / 1600.f * kTau) * (pend ? 1.f : 0.f), 26.f, pend ? ON_ACCENT : TEXT);
+  StrBuf v(b, sizeof b); v.put(tr("Versão instalada")).put(' ').put(TB_VERSION);
+  canvas_.textCentered(126.f, b, FONT_M, TEXT);
+  const char* st = nullptr; Color sc = MUTED;
+  char sb[64]; StrBuf s(sb, sizeof sb);
+  if (pend) {
+    s.put(tr("Nova versão")).put(' ').put(set_.updVersion).put(' ').put(tr("disponível")); st = sb; sc = acc(C_SW);
+  } else if (updChecking_ || updManual_) st = tr("Buscando...");
+  else if (updResult_ == 1) { st = tr("Tudo em dia"); sc = acc(C_SW); }
+  else if (!plat_.serviceUrl(Service::UpdateManifest)[0]) st = tr("Atualizações online em breve");
+  else if (!staUp_) st = tr("Conecte o Wi-Fi de casa");
+  if (st) canvas_.textCentered(150.f, st, FONT_S, sc);
+  if (pend && set_.updAuto && set_.updDueMin && clock_.valid()) {
+    int64_t lm = (int64_t)set_.updDueMin + TZ_TABLE[set_.tzIndex].offsetMin;
+    char tb2[40]; StrBuf w(tb2, sizeof tb2); w.put(tr("agendada para")).put(' ').numPad((int)((lm / 60) % 24), 2).put(':').numPad((int)(lm % 60), 2);
+    canvas_.textCentered(170.f, tb2, FONT_S, MUTED);
+  } else if (pend && updNotes_[0]) {
+    canvas_.textCentered(170.f, updNotes_, FONT_S, MUTED);
+  }
+  if (pend) {
+    pillButton(B_UPD_NOW, CX - 72.f, 204.f, 132.f, 32.f, ACCENT, "Atualizar agora", ON_ACCENT);
+    pillButton(B_UPD_NIGHT, CX + 72.f, 204.f, 132.f, 32.f, SURF2, "Esta noite", TEXT);
+  } else {
+    pillButton(B_UPD_CHECK, CX, 204.f, 210.f, 32.f, SURF2, "Buscar atualizações", TEXT);
+  }
+}
+
+void App::drawUpdateOffer(ms_t now) {
+  char b[64];
+  float bob = 3.f * fsin((float)(now % 1800) / 1800.f * kTau);
+  canvas_.fillCircle(CX, 56.f + bob, 30.f, ACCENT);
+  canvas_.ring(CX, 56.f + bob, 36.f + 3.f * fsin((float)(now % 1200) / 1200.f * kTau), 2.f, ACCENT, 90);
+  drawIcon(canvas_, Icon::Download, CX, 56.f + bob, 32.f, ON_ACCENT);
+  const char* title = tr("Atualização disponível");
+  const Font* fonts[2] = {&FONT_L, &FONT_M};
+  canvas_.textCentered(118.f, title, Canvas::fitFont(title, 300, fonts, 2), TEXT);
+  StrBuf v(b, sizeof b); v.put(tr("TubaBot ")).put(set_.updVersion);
+  canvas_.textCentered(142.f, b, FONT_M, acc(C_SW));
+  canvas_.textCentered(164.f, updNotes_[0] ? updNotes_ : tr("melhorias e novidades"), FONT_S, MUTED);
+  bool later = set_.updSnoozes < 3;
+  if (later) {
+    pillButton(B_UPD_NOW, 58.f, 206.f, 96.f, 34.f, ACCENT, "Agora", ON_ACCENT);
+    pillButton(B_UPD_LATER, CX, 206.f, 96.f, 34.f, SURF2, "Em 1 hora", TEXT);
+    pillButton(B_UPD_NIGHT, W - 58.f, 206.f, 96.f, 34.f, SURF2, "Esta noite", TEXT);
+  } else {
+    pillButton(B_UPD_NOW, CX - 70.f, 206.f, 128.f, 34.f, ACCENT, "Agora", ON_ACCENT);
+    pillButton(B_UPD_NIGHT, CX + 70.f, 206.f, 128.f, 34.f, SURF2, "Esta noite", TEXT);
+  }
+}
+
 void App::drawRecovery(ms_t now) {
   drawIcon(canvas_, Icon::Wifi, CX, 58.f, 44.f, ACCENT);
   canvas_.textCentered(118.f, "Abrir configuração?", FONT_L, TEXT);
@@ -880,14 +1038,14 @@ void App::drawResume(ms_t now) {
   canvas_.textCentered(34.f, "Sessão interrompida", FONT_L, TEXT);
   float y = 72.f;
   if (ckpt_.pomoActive) {
-    StrBuf s(b, sizeof b); s.put(ckpt_.pomoPhase == 0 ? "Foco " : "Pausa "); formatDuration(s, ckpt_.pomoRemainingMs, true);
+    StrBuf s(b, sizeof b); s.put(tr(ckpt_.pomoPhase == 0 ? "Foco " : "Pausa ")); formatDuration(s, ckpt_.pomoRemainingMs, true);
     canvas_.textCentered(y, b, FONT_M, acc(C_POMO)); y += 26.f;
   }
   for (int i = 0; i < kTimers && y < 140.f; i++) if (ckpt_.timerActive[i]) {
-    StrBuf s(b, sizeof b); s.put("Timer ").num(i + 1).put(' '); formatDuration(s, ckpt_.timerRemainingMs[i], true);
+    StrBuf s(b, sizeof b); s.put(tr("Timer ")).num(i + 1).put(' '); formatDuration(s, ckpt_.timerRemainingMs[i], true);
     canvas_.textCentered(y, b, FONT_M, acc(C_TIMER)); y += 26.f;
   }
-  if (ckpt_.swActive && y < 150.f) { StrBuf s(b, sizeof b); s.put("Cronômetro "); formatDuration(s, ckpt_.swElapsedMs, false); canvas_.textCentered(y, b, FONT_M, acc(C_SW)); }
+  if (ckpt_.swActive && y < 150.f) { StrBuf s(b, sizeof b); s.put(tr("Cronômetro ")); formatDuration(s, ckpt_.swElapsedMs, false); canvas_.textCentered(y, b, FONT_M, acc(C_SW)); }
   canvas_.textCentered(160.f, "(o tempo desligado não é contado)", FONT_S, MUTED);
   button(B_RESUME_NO, CX - 64.f, 200.f, 22.f, SURF2, Icon::Cross, TEXT);
   button(B_RESUME_YES, CX + 64.f, 200.f, 22.f, OK, Icon::Play, INK);
@@ -900,9 +1058,9 @@ void App::drawAlert(ms_t now) {
   const char* head = "Aviso";
   char b[48]; StrBuf s(b, sizeof b);
   switch (a.type) {
-    case AlertType::Timer: head = "Timer"; s.put("Timer ").num(a.index + 1).put(" acabou!"); break;
-    case AlertType::PomoFocusDone: head = "Pomodoro"; s.put("Foco concluído!"); col = C_POMO; ic = Icon::Tomato; break;
-    case AlertType::PomoBreakDone: head = "Pomodoro"; s.put("Pausa acabou!"); col = C_SW; ic = Icon::Tomato; break;
+    case AlertType::Timer: head = "Timer"; s.put(tr("Timer ")).num(a.index + 1).put(tr(" acabou!")); break;
+    case AlertType::PomoFocusDone: head = "Pomodoro"; s.put(tr("Foco concluído!")); col = C_POMO; ic = Icon::Tomato; break;
+    case AlertType::PomoBreakDone: head = "Pomodoro"; s.put(tr("Pausa acabou!")); col = C_SW; ic = Icon::Tomato; break;
     case AlertType::Reminder: head = "Lembrete"; s.put(set_.reminders[a.index].label); col = C_INFO; ic = Icon::Bell; break;
     case AlertType::Alarm: {
       head = set_.alarms[a.index].label; col = C_ALARM; ic = Icon::Alarm;
@@ -917,8 +1075,8 @@ void App::drawAlert(ms_t now) {
   canvas_.fillCircle(76.f, 100.f, 40.f, col);
   drawIcon(canvas_, ic, 76.f + 22.f * wig, 100.f, 44.f, INK);
   canvas_.text(134.f, 76.f, head, FONT_M, acc(col));
-  const Font* fonts[3] = {&FONT_XL, &FONT_L, &FONT_M};
-  canvas_.text(134.f, 122.f, b, Canvas::fitFont(b, 172, fonts, 3), TEXT);
+  const Font* fonts[4] = {&FONT_XL, &FONT_L, &FONT_M, &FONT_S};
+  canvas_.text(134.f, 122.f, b, Canvas::fitFont(b, 172, fonts, 4), TEXT);
   bool snooze = a.type == AlertType::Reminder || a.type == AlertType::Alarm;
   if (snooze) {
     pill(canvas_, 100.f, 194.f, 132.f, 40.f, SURF2, a.type == AlertType::Alarm ? "Adiar 5 min" : "Adiar 10", FONT_S, TEXT);
@@ -987,10 +1145,18 @@ void App::render(ms_t now) {
     case Screen::Today: drawToday(now); break;
     case Screen::Launcher: drawGridScreen("Menu", now); break;
     case Screen::MoreApps: drawGridScreen("Mais apps", now); break;
+    case Screen::Legends: {
+      char b[40]; StrBuf s(b, sizeof b); s.put(tr("Lendárias")).put("  ").num(legendsSeen()).put('/').num(SCENE_COUNT);
+      drawListScreen(b, 0xFFD54A, now);
+      break;
+    }
+    case Screen::Language: drawListScreen("Idioma", TEXT, now); break;
+    case Screen::Update: drawUpdate(now); break;
+    case Screen::UpdateOffer: drawUpdateOffer(now); break;
     case Screen::Quick: drawQuick(now); break;
     case Screen::Pomodoro: drawPomodoro(now); break;
     case Screen::Timers: drawTimers(now); break;
-    case Screen::TimerSet: { char b[24]; StrBuf s(b, sizeof b); s.put("Duração do timer ").num(timerSel_ + 1); drawListScreen(b, acc(C_TIMER), now); break; }
+    case Screen::TimerSet: { char b[24]; StrBuf s(b, sizeof b); s.put(tr("Duração do timer ")).num(timerSel_ + 1); drawListScreen(b, acc(C_TIMER), now); break; }
     case Screen::Stopwatch: drawStopwatch(now); break;
     case Screen::Alarms: drawAlarms(now); break;
     case Screen::AlarmEdit: drawAlarmEdit(now); break;
@@ -1028,6 +1194,7 @@ void App::render(ms_t now) {
   canvas_.setGlobalAlpha(255);
   if (alertN_ && screen_ != Screen::ScreenOff) { hitN_ = 0; drawAlert(now); }
   else if (screen_ != Screen::ScreenOff && screen_ != Screen::Ota) drawHoldHint(now);
+  if (!alertN_ && screen_ != Screen::ScreenOff && screen_ != Screen::Ota && screen_ != Screen::Game) drawMedal(now);
   drawToast(now);
 }
 

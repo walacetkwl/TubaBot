@@ -9,7 +9,7 @@ enum class Icon : uint8_t {
   Face, Clock, Tomato, Timer, Stopwatch, Alarm, Games, Silent, Sparkle, Gear, Info, Breath, Level, Dice,
   Sun, Cloud, PartCloud, Rain, Storm, Snow, Fog, Moon,
   Wifi, Speaker, Brightness, Vibrate, Back, Check, Cross, Play, Pause, Skip, Reset, Plus, Minus, Heart, Bell,
-  Note, Stats, Lock, Fish, Shark, Weather, Bolt, Menu, Palette, Count
+  Note, Stats, Lock, Fish, Shark, Weather, Bolt, Menu, Palette, Medal, Download, Globe, Count
 };
 
 void drawIcon(Canvas& c, Icon id, float cx, float cy, float size, Color col, int a = 255);

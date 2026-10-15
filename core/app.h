@@ -15,6 +15,8 @@
 #include "ui.h"
 #include "qr.h"
 #include "factory.h"
+#include "i18n.h"
+#include "scenes.h"
 
 namespace tb {
 
@@ -37,8 +39,13 @@ struct SysInfo {
   uint32_t heapFree = 0, heapMin = 0, psramFree = 0, flashSize = 0, sketchSize = 0, sketchFree = 0;
   char chip[24] = {0};
   char build[40] = {0};
+  char deviceId[20] = {0};   // identificador do chip (MAC), p/ unidades sem número de série
   bool simulated = false;
 };
+
+enum class Service : uint8_t { UpdateManifest, Telemetry };
+
+int versionCompare(const char* a, const char* b);   // "3.1.0" vs "3.0.2": <0, 0, >0
 
 class Platform {
  public:
@@ -59,15 +66,21 @@ class Platform {
   virtual void rtcWrite(int64_t epoch) { (void)epoch; }  // relógio com bateria (se houver)
   // Perfil de fábrica (texto, ver factory.h). false = não gravado.
   virtual bool factoryLoad(char* buf, size_t cap, size_t* len) { (void)buf; (void)cap; *len = 0; return false; }
+  // Serviços da TubaLabs na internet (vazio = desativado até existir servidor):
+  // manifesto de atualização e coleta de telemetria. Ver docs/futuras-atualizacoes.html.
+  virtual const char* serviceUrl(Service s) { (void)s; return ""; }
 };
 
 enum class Screen : uint8_t {
   Intro, FirstUse, Face, Clock, Today, Launcher, MoreApps, Quick, Pomodoro, Timers, TimerSet, Stopwatch, Alarms, AlarmEdit,
   GamesMenu, Game, Expressions, Breath, Level, Dice, Weather, Stats,
   Appearance, ColorPick, Overlays, Volume, Brightness, Wifi, System, Config, Info, Torch,
-  Confirm, RecoveryConfirm, Resume, ScreenOff, Ota, Count
+  Confirm, RecoveryConfirm, Resume, ScreenOff, Ota,
+  Legends, Language, Update, UpdateOffer, Count
 };
 const char* screenName(Screen s);
+
+static const uint16_t INTRO_FULL_MS = 2800, INTRO_SHORT_MS = 900;
 
 enum class AlertType : uint8_t { Timer, PomoFocusDone, PomoBreakDone, Reminder, Alarm };
 struct Alert { AlertType type; uint8_t index; ms_t at; };
@@ -121,6 +134,19 @@ class App {
   uint32_t frameIntervalMs(ms_t now) const;
   void audioRender(int16_t* out, int n) { out_.synth().render(out, n); }
   bool motor() const { return out_.motor(); }
+
+  // ── atualização pela internet (o firmware baixa; o núcleo decide quando e pergunta ao usuário) ──
+  bool updateWant(ms_t now, char* url, size_t cap);                 // buscar o manifesto agora?
+  void updateManifest(const char* body, size_t len, int httpCode, ms_t now);
+  // Instalação autorizada (usuário tocou "Atualizar agora" ou chegou a hora agendada):
+  // devolve URL do binário, SHA-256 (hex) e tamanho uma única vez; o firmware chama enterOta().
+  bool updateInstallWant(char* url, size_t ucap, char* sha, size_t scap, uint32_t* size);
+  void checkUpdatesNow(ms_t now);                                   // "Buscar atualizações"
+  const char* pendingUpdate() const { return set_.updVersion; }
+  // ── telemetria (painel da TubaLabs; nada de dados pessoais) ──
+  bool telemetryWant(ms_t now, char* url, size_t ucap, StrBuf& body);
+  void telemetryResult(int httpCode, ms_t now);
+  void writeTelemetry(JsonOut& j, ms_t now);
 
   // ── clima (o firmware faz o HTTPS; o núcleo decide e interpreta) ──
   bool weatherWant(ms_t now, char* url, size_t cap);
@@ -190,6 +216,13 @@ class App {
   int listIndexOf(int id) const;
   bool listItemPos(int id, int& x, int& y);
   Expr baseExpr() const { return baseExpr_; }
+  // reações lendárias
+  bool sceneActive() const { return scene_.active(); }
+  SceneId sceneId() const { return scene_.id(); }
+  bool medalVisible(ms_t now) const { return medalAt_ && now - medalAt_ < kMedalMs; }
+  void playLegend(SceneId s, ms_t now, bool natural, Screen back = Screen::Face);
+  int legendsSeen() const;
+  static const uint32_t kMedalMs = 4200;
 
  private:
   // fluxo
@@ -230,6 +263,18 @@ class App {
   void setInputModeFor(Screen s);
   bool quietNow(ms_t now) const;
   Expr idleExpression(ms_t now);
+  bool bedtimeNow(ms_t now, int* minsToBed = nullptr);
+  int64_t localDay(ms_t now) const;
+  int localMinute(ms_t now) const;          // -1 sem relógio
+  void maybeLegend(ms_t now);
+  SceneId chooseLegend(ms_t now, bool soundTriggered);
+  void endScene(ms_t now);
+  void abortScene(ms_t now);
+  void noteActivity(ms_t now);
+  void updateNet(ms_t now);
+  void offerUpdate(ms_t now);
+  void scheduleUpdate(int choice, ms_t now);   // 0 agora, 1 em 1 h, 2 esta noite
+  void applyLanguage();
   int availableExprs(Expr* out, int max) const;
   void buildList(ms_t now, bool keepScroll = false);
   void cycleSetting(int id, ms_t now);
@@ -248,11 +293,15 @@ class App {
   void hit(int id, float cx, float cy, float r);
   void hitRect(int id, float x, float y, float w, float h);
   void button(int id, float cx, float cy, float r, Color bg, Icon ic, Color fg);
+  void pillButton(int id, float cx, float cy, float w, float h, Color bg, const char* label, Color fg);
   int hitTest(int x, int y) const;
   void drawFaceOverlays(ms_t now);
   void drawDock(ms_t now);
   void drawFaceScreen(ms_t now);
   void drawIntro(ms_t now);
+  void drawUpdate(ms_t now);
+  void drawUpdateOffer(ms_t now);
+  void drawMedal(ms_t now);
   void drawClock(ms_t now);
   void drawToday(ms_t now);
   void drawGridScreen(const char* title, ms_t now);
@@ -358,6 +407,9 @@ class App {
   ms_t wakeGuard_ = 0;
   bool suppressSwipe_ = false;
   ms_t dockUntil_ = 0;          // controles sobre o rosto (aparecem ao tocar)
+  ms_t nextClockAct_ = 0;       // relógio "Tuba": próxima olhadinha/caretinha
+  int64_t sleepDay_ = -1;       // dia (local) do sorteio da hora de dormir
+  int bedMin_ = 20 * 60 + 60, wakeMin_ = 6 * 60 + 30;
   // respiração / sorteio
   bool breathOn_ = false;
   uint8_t breathMode_ = 0;
@@ -392,6 +444,30 @@ class App {
   uint32_t eventSeq_ = 0;
   bool forceFrame_ = true;
   ms_t lastRender_ = 0;
+  // reações lendárias
+  ScenePlayer scene_;
+  bool sceneNew_ = false;          // primeira vez: medalha ao terminar
+  Screen sceneBack_ = Screen::Face;
+  ms_t medalAt_ = 0;
+  SceneId medalScene_ = SceneId::Relogio;
+  ms_t nextLegendCheck_ = 0;
+  int64_t legendRollDay_ = -999999;
+  bool legendToday_ = false;
+  int legendAtMin_ = -1;
+  // rede, atualização e telemetria
+  bool staUp_ = false;
+  ms_t netPollAt_ = 0;
+  ms_t updCheckAt_ = 0, updLastCheck_ = 0, updDueMs_ = 0;
+  bool updChecking_ = false, updManual_ = false, updInstallReq_ = false, updOffer_ = false;
+  int8_t updResult_ = 0;           // 0 nunca, 1 em dia, 2 disponível, -1 falha
+  char updUrl_[160] = {0};
+  char updSha_[65] = {0};
+  uint32_t updSize_ = 0;
+  char updNotes_[120] = {0};
+  ms_t telAt_ = 0;
+  uint8_t telFails_ = 0;
+  int lastLang_ = -1;
+  ms_t lastActAt_ = 0;
   // QR (cache)
   QrCode qr_;
   char qrText_[96] = {0};

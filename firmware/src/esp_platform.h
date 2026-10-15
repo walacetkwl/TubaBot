@@ -31,6 +31,7 @@ class EspPlatform : public tb::Platform {
   void setTimezone(const char* posix) override;
   bool busy() override { return otaActive_ || saving_; }
   void log(const char* msg) override;
+  const char* serviceUrl(tb::Service sv) override;
 
   bool apActive() const { return apActive_; }
 

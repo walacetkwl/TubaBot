@@ -62,7 +62,10 @@ class SimPlatform : public Platform {
     return true;
   }
   void wifiForget() override { staConfigured = false; staSsid[0] = 0; }
-  void sysInfo(SysInfo& s) override { s = SysInfo(); s.simulated = true; tbStrlcpy(s.chip, "Simulador WASM", sizeof s.chip); tbStrlcpy(s.build, "sim", sizeof s.build); }
+  void sysInfo(SysInfo& s) override { s = SysInfo(); s.simulated = true; tbStrlcpy(s.chip, "Simulador WASM", sizeof s.chip); tbStrlcpy(s.build, "sim", sizeof s.build); tbStrlcpy(s.deviceId, "SIM0000AB12", sizeof s.deviceId); }
+  // "Servidor" da TubaLabs simulado pelo JavaScript (aba Atualização)
+  bool services = true;
+  const char* serviceUrl(Service sv) override { return !services ? "" : sv == Service::UpdateManifest ? "sim://tubalabs/estavel.json" : "sim://tubalabs/telemetria"; }
   void requestReboot() override { js_reboot(); }
   void applyDisplay(uint8_t b, bool r) override { js_display(b, r ? 1 : 0); }
   void setTimezone(const char*) override {}
@@ -110,9 +113,9 @@ EXPORT("sim_factory_compose") int sim_factory_compose(int len) {
 EXPORT("sim_init") void sim_init(uint32_t seed, int dev, double now, int caps) {
   bool keepNet = plat != nullptr;
   SimPlatform saved;
-  if (keepNet) { saved.staConfigured = plat->staConfigured; saved.wifiBroken = plat->wifiBroken; tbStrlcpy(saved.staSsid, plat->staSsid, sizeof saved.staSsid); }
+  if (keepNet) { saved.staConfigured = plat->staConfigured; saved.wifiBroken = plat->wifiBroken; saved.services = plat->services; tbStrlcpy(saved.staSsid, plat->staSsid, sizeof saved.staSsid); }
   plat = new (platMem) SimPlatform();
-  if (keepNet) { plat->staConfigured = saved.staConfigured; plat->wifiBroken = saved.wifiBroken; tbStrlcpy(plat->staSsid, saved.staSsid, sizeof plat->staSsid); }
+  if (keepNet) { plat->staConfigured = saved.staConfigured; plat->wifiBroken = saved.wifiBroken; plat->services = saved.services; tbStrlcpy(plat->staSsid, saved.staSsid, sizeof plat->staSsid); }
   app = new (appMem) App(*plat);
   app->attachFramebuffer(framebuffer);
   HwCaps c;
@@ -157,6 +160,22 @@ EXPORT("sim_api") int sim_api(int bodyLen, int viaAP, int devTools, double now) 
 }
 EXPORT("sim_weather_want") const char* sim_weather_want(double now) { return app->weatherWant((ms_t)now, urlBuf, sizeof urlBuf) ? urlBuf : nullptr; }
 EXPORT("sim_weather_result") void sim_weather_result(int len, int code, double now) { app->weatherResult(inBuf, (size_t)len, code, (ms_t)now); }
+// atualização e telemetria: o JS faz o papel do servidor da TubaLabs
+EXPORT("sim_services") void sim_services(int on) { plat->services = on != 0; }
+EXPORT("sim_update_want") const char* sim_update_want(double now) { return app->updateWant((ms_t)now, urlBuf, sizeof urlBuf) ? urlBuf : nullptr; }
+EXPORT("sim_update_result") void sim_update_result(int len, int code, double now) { app->updateManifest(inBuf, (size_t)len, code, (ms_t)now); }
+EXPORT("sim_update_install") int sim_update_install(double now) {
+  static char sha[70]; uint32_t sz = 0;
+  if (!app->updateInstallWant(urlBuf, sizeof urlBuf, sha, sizeof sha, &sz)) return 0;
+  app->enterOta((ms_t)now);
+  return 1;
+}
+EXPORT("sim_ota_progress") void sim_ota_progress(int pm) { app->otaProgress(pm); }
+EXPORT("sim_telemetry_want") const char* sim_telemetry_want(double now) {
+  StrBuf b(outBuf, sizeof outBuf);
+  return app->telemetryWant((ms_t)now, urlBuf, sizeof urlBuf, b) ? outBuf : nullptr;
+}
+EXPORT("sim_telemetry_result") void sim_telemetry_result(int code, double now) { app->telemetryResult(code, (ms_t)now); }
 EXPORT("sim_open_config") void sim_open_config(double now) { app->openConfig((ms_t)now); }
 EXPORT("sim_set_wifi_broken") void sim_set_wifi_broken(int b) { plat->wifiBroken = b != 0; }
 EXPORT("sim_flush") void sim_flush(double now) { app->flush((ms_t)now, true); }

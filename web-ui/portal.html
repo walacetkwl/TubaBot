@@ -184,6 +184,8 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
   <div class="card"><h2>Expressões</h2><p class="sub">As básicas (inclusive coração e carinho) já vêm liberadas. As especiais você ganha brincando.</p>
     <div class="note" id="testNote" hidden>Perfil de TESTE do simulador ativo: estes desbloqueios não são gravados.</div>
     <div class="grid" id="coll"></div></div>
+  <div class="card"><h2>Reações lendárias</h2><p class="sub">Raras e secretas: aparecem sozinhas, de vez em quando, conforme o Tuba se apega a você. Não dá para pedir — mas as que já apareceram podem ser repetidas para mostrar aos amigos.</p>
+    <div class="grid" id="legs"></div></div>
 </section>
 
 <section data-tab="Hora e data">
@@ -239,7 +241,17 @@ footer{color:var(--muted);text-align:center;font-size:13px;padding:10px}
   <div class="card"><h2>Sistema</h2><dl class="kv" id="sysKv"></dl>
     <div class="actions"><button class="btn sec" id="backup">Baixar backup</button><label class="btn ghost">Importar backup<input id="restore" type="file" accept="application/json,.json" hidden></label><button class="btn ghost" data-act="reboot">Reiniciar</button></div>
   </div>
-  <div class="card"><h2>Atualizar firmware</h2><p class="sub">Arquivo <code>tubabot-v3…-app-ota.bin</code> (ESP32-S3), gravado pela própria rede do Tuba (sem servidor externo). O perfil de fábrica e seus dados são mantidos.</p>
+  <div class="card"><h2>Idioma e privacidade</h2><p class="sub">Idioma da tela do Tuba (este portal segue em português por enquanto).</p>
+    <label class="f" for="lang">Idioma do aparelho</label>
+    <select id="lang"><option value="pt-BR">Português (Brasil)</option><option value="en">English</option><option value="es-419">Español (Latinoamérica)</option></select>
+    <div class="sw"><div><div class="t">Estatísticas anônimas</div><div class="d">Ajuda a TubaLabs a melhorar o Tuba: versão, modelo e se houve uso hoje. Nada de apelido, rede, áudio ou toques.</div></div><label class="tg"><input type="checkbox" id="telemetry"><span></span></label></div>
+    <div class="actions"><button class="btn" data-save="lang">Salvar</button></div>
+  </div>
+  <div class="card"><h2>Atualizações pela internet</h2><p class="sub" id="updSub">Com o Wi-Fi de casa, o Tuba procura versões novas sozinho e avisa na tela (dá para adiar, não para ignorar).</p>
+    <dl class="kv" id="updKv"></dl>
+    <div class="actions"><button class="btn sec" data-act="update.check">Buscar atualizações</button><button class="btn ghost" id="updNow" hidden>Atualizar agora</button><button class="btn ghost" id="updNight" hidden>Esta noite</button></div>
+  </div>
+  <div class="card"><h2>Atualizar firmware (arquivo)</h2><p class="sub">Arquivo <code>tubabot-v3…-app-ota.bin</code> (ESP32-S3), gravado pela própria rede do Tuba (sem servidor externo). O perfil de fábrica e seus dados são mantidos.</p>
     <input id="fw" type="file" accept=".bin">
     <div class="bar" id="fwBar" hidden><i style="width:0"></i></div><div class="hint" id="fwMsg"></div>
     <div class="actions"><button class="btn" id="fwGo">Enviar atualização</button></div>
@@ -358,6 +370,7 @@ function fill(){
   $("#showClock").checked=p.showClock; $("#showWeather").checked=p.showWeather;
   const hasBat=!!(ST.caps&&ST.caps.battery); $("#showBatteryRow").hidden=!hasBat; $("#showBattery").checked=!!p.showBattery;
   $("#imuBox").hidden=!(ST.caps&&ST.caps.imu);
+  $("#lang").value=p.language||"pt-BR"; $("#telemetry").checked=p.telemetry!==false;
   ["imuReactions","micReactions","tiltLook","faceDownSnooze","wakeOnPickup","weatherEnabled"].forEach(k=>$("#"+k).checked=p[k]);
   $("#city").value=p.weather.city; $("#customLL").hidden=p.weather.city!=="custom";
   $("#lat").value=(p.weather.latE4/1e4).toFixed(4); $("#lon").value=(p.weather.lonE4/1e4).toFixed(4);
@@ -373,7 +386,14 @@ function fill(){
 }
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
+function fillUpdate(){
+  const u=ST.update; if(!u) return;
+  const res={up_to_date:"em dia",available:"versão nova disponível",failed:"não foi possível buscar",never:"ainda não buscou"}[u.result]||u.result;
+  $("#updKv").innerHTML=`<dt>Instalada</dt><dd>${esc(u.installed)}</dd>${u.pending?`<dt>Disponível</dt><dd>${esc(u.pending)}${u.auto?" · agendada":""}</dd>`:""}<dt>Situação</dt><dd>${u.serviceConfigured?esc(u.checking?"buscando...":res):"servidor de atualizações ainda não configurado"}</dd>`;
+  $("#updNow").hidden=$("#updNight").hidden=!u.pending;
+}
 function fillStatus(){
+  fillUpdate();
   const s=ST; $("#hName").textContent=s.nickname||"Seu Tuba"; $("#hModel").textContent=s.modelName; $("#fver").textContent="versão "+s.version;
   $("#hSub").textContent=(s.personality==="brincalhao"?"Brincalhão":"Tranquilo")+" · "+(s.net.apActive?"rede do Tuba ligada":"rede do Tuba fechada");
   const pomo=s.pomodoro, ph={focus:"Foco",short:"Pausa",long:"Pausa longa"}[pomo.phase], st={idle:"parado",running:"rodando",paused:"pausado",done:"concluído"};
@@ -396,7 +416,14 @@ async function loadRecords(){
   $("#rJump").textContent="Recorde: "+p.jumpBest+" obstáculos"; $("#rReflex").textContent="Melhor reação: "+(p.reflexBestMs?p.reflexBestMs+" ms":"—");
   $("#rFish").textContent="Recorde: "+p.fishBest+" peixes"; $("#rDive").textContent="Recorde: "+p.diveBest+" peixes"; $("#rTiming").textContent="Melhor precisão: "+(p.timingBestPct100?(p.timingBestPct100/100).toFixed(2).replace(".",",")+"%":"—");
 }
+async function loadLegends(){
+  const r=await api("GET","/api/legends"); if(r.status!==200) return;
+  const L=r.data, sec=L.items.filter(i=>!i.seen).length;
+  $("#legs").innerHTML=L.items.filter(i=>i.seen).map(i=>`<div class="tile"><b>🏅 ${esc(i.name)}</b><small>${esc(i.hint)}</small><div class="actions" style="justify-content:center;margin-top:8px"><button class="btn ghost" data-leg="${i.key}">Repetir</button></div></div>`).join("")+
+    (sec?`<div class="tile lock"><b>🔒 ${sec} secreta${sec>1?"s":""}</b><small>continue cuidando do Tuba</small></div>`:"");
+}
 async function loadCollection(){
+  loadLegends();
   const r=await api("GET","/api/collection"); if(r.status!==200) return; COLL=r.data; $("#testNote").hidden=!COLL.testProfile;
   const all=COLL.base.map(e=>({...e,unlocked:true})).concat(COLL.unlockables);
   $("#coll").innerHTML=all.map(e=>`<div class="tile ${e.unlocked?"":"lock"}"><b>${esc(e.unlocked?e.name:"???")}</b>${e.criterion?`<small>${esc(e.criterion)}</small><div class="bar"><i style="width:${Math.round(100*e.current/e.goal)}%"></i></div>`:"<small>Básica</small>"}${e.unlocked?`<div class="actions" style="justify-content:center;margin-top:8px"><button class="btn ghost" data-face="${e.key}">Mostrar</button></div>`:""}</div>`).join("");
@@ -423,12 +450,16 @@ const savers={
   games:()=>save({jumpEasy:$("#jumpEasy").checked}),
   time:()=>save({tz:$("#tz").value,clock24h:$("#c24").checked}),
   net:()=>save({apTimeoutMin:+$("#apTimeout").value}),
+  lang:()=>save({language:$("#lang").value,telemetry:$("#telemetry").checked}),
 };
+$("#updNow").onclick=()=>act("update.schedule",{when:"now"}).then(()=>toast("Instalando quando possível"));
+$("#updNight").onclick=()=>act("update.schedule",{when:"night"}).then(()=>toast("Agendada para esta noite"));
 document.addEventListener("click",async e=>{
   const t=e.target.closest("button,a"); if(!t) return;
   if(t.dataset.save){ t.disabled=true; await savers[t.dataset.save](); t.disabled=false; }
   if(t.dataset.act){ await act(t.dataset.act); toast("Feito ✓"); }
   if(t.dataset.timer){ const op=t.dataset.op; await act("timer."+op,{slot:+t.dataset.timer}); }
+  if(t.dataset.leg){ await act("legend.play",{scene:t.dataset.leg}); toast("Olha o Tuba!"); }
   if(t.dataset.face){ await act("face",{expr:t.dataset.face}); toast("Olha o Tuba!"); }
   if(t.dataset.preview!==undefined){ previewOut(t.dataset.preview); }
   if(t.dataset.reset){ resetFlow(t.dataset.reset); }
@@ -489,6 +520,8 @@ function showTab(name){ $$("section").forEach(s=>s.classList.toggle("on",s.datas
 let wStep=0;
 function wizShow(){ $$("[data-step]").forEach(d=>d.hidden=+d.dataset.step!==wStep); $$(".steps i").forEach((i,k)=>i.classList.toggle("on",k<=wStep));
   $("#wTime").textContent=new Date().toLocaleString("pt-BR"); const lite=!(ST.caps&&ST.caps.speaker); $("#wSound").hidden=lite; $("#wLite").hidden=!lite; }
+$("#updNow").onclick=()=>act("update.schedule",{when:"now"}).then(()=>toast("Instalando quando possível"));
+$("#updNight").onclick=()=>act("update.schedule",{when:"night"}).then(()=>toast("Agendada para esta noite"));
 document.addEventListener("click",async e=>{ if(!e.target.matches("[data-next]")) return;
   if(wStep===0){ const ok=await save({nickname:$("#wNick").value,personality:segGet("wPers")},"w"); if(!ok) return; }
   if(wStep===1){ const tz=localTz(); const b={epoch:nowEpoch()}; if(ZONES.some(z=>z.iana===tz)) b.tz=tz; await api("POST","/api/time",b);

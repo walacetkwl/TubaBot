@@ -1,4 +1,4 @@
-# TubaBot v3 — funcionalidades, gestos, regras e políticas
+# TubaBot v3.1 — funcionalidades, gestos, regras e políticas
 
 Tudo abaixo está implementado em `core/` e roda igual no firmware (ES3C28P / ESP32-S3), no simulador (WebAssembly) e nos testes nativos. O que é novo na v3 está marcado com **(v3)**.
 
@@ -84,14 +84,45 @@ Menu principal em grade 3×3, feito para o dedo:
 | **Aparência** (tema, cor das expressões, informações na tela, brilho dos olhos, relógio) | **Volume** (com silencioso) | **Brilho** (com brilho reduzido à noite) |
 | **Wi-Fi** (rede de casa, configurar pelo celular, rede do Tuba, esquecer) | **Sistema** (personalidade, animação, apagar a tela, 24 h, silencioso, reagir a sons, girar 180°, informações, restaurar padrão de fábrica) | **Mais apps** |
 
-**Mais apps:** Cronômetro, Alarmes, Relógio, Clima, Respirar, Sorteio, Expressões, Meu Tuba, Sobre.
+**Mais apps:** Cronômetro, Alarmes, Relógio, Clima, Respirar, Sorteio, Expressões, Meu Tuba, **Lendárias**. "Sobre" ficou em Sistema → Informações.
+**Sistema** ganhou: **Idioma**, **Atualizações** e **Estatísticas anônimas**.
 **Painel rápido** (deslizar para baixo no rosto): silencioso, tema claro/escuro, reagir a sons, lanterna, Wi-Fi + brilho e volume deslizantes.
 
 ## 9. Expressões e personalidade
 
 - 34 expressões paramétricas com transições suaves, piscar simples/duplo, olhar para os lados, respiração, olhar que segue o dedo, dança no ritmo da música, "boop" (o rosto achata e volta). Básicas: Feliz, Neutro, Surpreso, Apaixonado, Triste, Sonolento (dormir/acordar), Bravo (irritação), Piscadinhas, Carinho, Olhos em X; de contexto: Foco (concentração), Descanso, Acerto, Quase! (derrota por pouco), Comemoração (vitória), Esperando; reações: Tonto, Assustado, Apertado, Carregando, Cansado, Curioso.
 - **Coleção** de 10 desbloqueáveis (Tímido, Focado, Vitorioso, Satisfeito, Espantado, Precisão, Dançante, Zen, Mergulhador, Radiante).
+- **Rotina do dia (v3.1):** a tela **nunca apaga** por padrão. Cada dia o Tuba sorteia quando fica com sono — entre **20:00 e 22:30** — e quando acorda (6:00–7:00). Até 45 min antes ele às vezes fica "cansadinho"; depois, sonolento com "zzz" (precisa da hora ajustada).
+- **Abertura (v3.1):** barbatana curva em duas tonalidades surge do mar, desliza com inclinação proporcional à velocidade e rastro de espuma, mergulha com respingos; aparece o nome e o rosto sobe da água abrindo os olhos.
+- **Relógio "Tuba" (v3.1):** o rostinho ao lado da hora é o rosto vivo — pisca, olha em volta, de vez em quando "confere" os números, pisca o olho, fica curioso; à noite, sonolento.
 - Personalidades Tranquilo/Brincalhão mudam ritmo de piscadas, alcance do olhar, microreações e a resposta ao toque. Humor, energia e vínculo em **Meu Tuba**.
+
+## 9b. Reações lendárias **(v3.1)**
+
+Cenas raras em que o Tuba usa "mãos" (luvinhas na cor das expressões) e objetos:
+
+| Cena | Como aparece |
+|---|---|
+| Olhar o relógio | um relógio de pulso sobe; ele confere a hora, se assusta e ri |
+| Joinha | um polegar para cima aprova o seu dia |
+| Peixinho passando | um peixe atravessa a tela; ele acompanha com os olhos e lambe os beiços |
+| Pegou o peixe! | o peixe passa na altura da boca e ele dá o bote, mastiga, sobra a espinha (só depois de já ter visto o "peixinho passando") |
+| Cafezinho | só de manhã (6h–11h): xícara com fumacinha, bebe de olhos fechados, "ahh..." |
+| Meditação | mãos em mudra, olhos fechados, flutua devagar, "ommm" |
+| Escada rolante | finge que foi embora descendo na diagonal, espia do canto, dá tchau e volta rindo |
+| Que barulho! | com barulho alto: tampa os ouvidos com as mãos, olhos ><, treme e depois "ufa!" |
+| Bocejo | ao anoitecer: boceja cobrindo a boca com a mão |
+
+Regras: **não podem ser pedidas** por toques; vêm com a **afinidade** (vínculo: carinhos, Pomodoros, respirações e jogos). No máximo **uma por dia**, e nem todo dia (chance diária de 18% a 55% conforme a afinidade), só quando há alguém por perto (interação nos últimos 30 min, mas nunca logo após um toque) e nunca durante o foco. Prefere as ainda não vistas. Na primeira vez aparece a medalha **"Reação lendária desbloqueada!"** (tocar nela abre a coleção). Em **Mais apps → Lendárias** ficam as descobertas (tocar repete) e quantas secretas faltam. Tocar no rosto durante uma cena a encerra.
+
+## 9c. Idiomas **(v3.1)**
+
+Português (Brasil), inglês e espanhol (América Latina) em **Sistema → Idioma**; o padrão vem do perfil de fábrica (`idioma=`). Todas as telas passam por uma tabela de tradução (`core/i18n_table.inc`); `make i18n-audit` lista textos sem tradução.
+
+## 9d. Atualizações e telemetria **(v3.1)**
+
+- Com Wi-Fi de casa e o servidor configurado (`TB_UPDATE_URL`), o Tuba procura versões ao conectar, a cada 6 h e em **Buscar atualizações** (Sistema → Atualizações ou Informações → Sobre). Havendo versão nova, avisa na tela: **Agora**, **Em 1 hora** (até 3 vezes) ou **Esta noite** (instala sozinho às 3h). Não existe "ignorar": sem resposta em 60 s o aviso é adiado. O download confere SHA-256; falhou, tenta de novo em 1 h.
+- Telemetria anônima a cada 10 min (série, modelo, versão, ativado, interação hoje/7 dias), desligável em Sistema → Estatísticas anônimas. Detalhes e o painel planejado em [`futuras-atualizacoes.html`](futuras-atualizacoes.html).
 
 ## 10. Som e microfone
 

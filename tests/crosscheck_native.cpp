@@ -2,6 +2,7 @@
 #include "fake_platform.h"
 #include "scenario.h"
 #include <cstdio>
+#include <cstring>
 #include <vector>
 using namespace tb;
 
@@ -36,6 +37,18 @@ int main() {
       case 0: case 1: a.touchSample(r[1] != 0, (int)r[2], (int)r[3], target); break;
       case 2: a.motionSample((int)r[2], (int)r[3], (int)r[4], target); break;
       case 3: a.soundLevel((int)r[2], target); break;
+      case 4: case 5: case 6: {
+        static const char* const K[] = {"relogio", "joinha", "peixe", "peixe_come", "cafe", "meditacao", "escada", "ouvidos", "bocejo"};
+        static const char* const L[] = {"pt-BR", "en", "es-419"};
+        char body[160], out[8192];
+        bool pref = r[1] == 5;
+        if (r[1] == 4) snprintf(body, sizeof body, "{\"action\":\"legend.play\",\"scene\":\"%s\",\"discover\":true}", K[r[2]]);
+        else if (pref) snprintf(body, sizeof body, "{\"language\":\"%s\"}", L[r[2]]);
+        else snprintf(body, sizeof body, "{\"action\":\"legend.open\"}");
+        StrBuf sb(out, sizeof out); ApiCtx ctx; ctx.devTools = true; ctx.token = a.sessionToken();
+        a.api("POST", pref ? "/api/prefs" : "/api/action", body, strlen(body), ctx, sb, target);
+        break;
+      }
     }
   }
 }

@@ -37,11 +37,11 @@ ws.row_dimensions[r0].height = 34
 
 items = [
  ("Placa ES3C28P — ESP32-S3 + tela IPS 2,8\" 240×320 com TOQUE CAPACITIVO", 1, "Lite e Pro",
-  "ESP32-S3R8 (16 MB flash, 8 MB PSRAM), ILI9341V, toque FT6336G, codec ES8311 + amplificador + microfone, conector de alto-falante, conector de bateria com carregador TP4054, USB-C",
+  "ESP32-S3 N16R8 (16 MB flash, 8 MB PSRAM), ILI9341V, toque FT6336G, codec ES8311 + amplificador + microfone, conector de alto-falante, conector de bateria com carregador TP4054, USB-C",
   "Modelo exato ES3C28P (o 'C' = capacitivo). NÃO comprar ES3N28P (sem toque) nem a 'ESP32-S3-Touch-LCD-2.8' da Waveshare (outra placa). A foto deve mostrar os conectores SPEAKER e BAT.",
   "es3c28p esp32-s3 2.8", "esp32-s3 2.8 tela touch capacitiva es3c28p", "es3c28p esp32 s3 2.8",
-  ("AliExpress — busca ES3C28P", "https://pt.aliexpress.com/w/wholesale-ES3C28P.html"),
-  90, 180, "Referência internacional ~US$ 15 (fabricante QDtech/LCDWIKI). No AliExpress com o Remessa Conforme costuma sair mais barato que no ML."),
+  ("AliExpress — anúncio comprado (Electree Store, variante With Touch, With Speaker)", "https://pt.aliexpress.com/item/1005012105732485.html"),
+  100, 180, "Comprada no AliExpress por R$ 105,93 (out/2026, oferta de 1ª compra, frete grátis Choice) — variante 'With Touch, With Speaker' = ES3C28P. Anúncio confirma N16R8, ILI9341V SPI, D-FT6336G I2C, alto-falante 1,5 W/8 Ω ou 2 W/4 Ω, bateria LiPo 3,7 V 1,25 mm."),
  ("Alto-falante 8 Ω 1,5–2 W (ou 4 Ω 2 W), pequeno", 1, "Lite e Pro",
   "Cápsula 28–40 mm ou retangular 20×30 mm; 8 Ω 1,5 W ou 4 Ω 2 W (valores da LCDWIKI)",
   "Impedância e potência; já com fios. Confira o plugue do conector SPEAKER da sua placa (MX1.25 ou PH2.0) — se não bater, use o kit de rabichos.",

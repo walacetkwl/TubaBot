@@ -1,0 +1,27 @@
+TubaBot — software do aparelho, simulador, portal e ferramentas
+Copyright (c) 2026 TubaLabs. Todos os direitos reservados.
+
+Este software é PROPRIETÁRIO e CONFIDENCIAL. Nenhuma licença é concedida por
+estar disponível em um repositório. É proibido, sem autorização prévia e por
+escrito da TubaLabs:
+
+  1. copiar, reproduzir, distribuir, publicar, sublicenciar ou vender este
+     software, no todo ou em parte;
+  2. modificar, traduzir, adaptar ou criar obras derivadas;
+  3. fazer engenharia reversa, descompilar ou extrair o firmware gravado nos
+     aparelhos TubaBot, salvo quando a lei aplicável permitir expressamente;
+  4. usar o software, o nome "TubaBot", o personagem, as expressões, os sons
+     ou a identidade visual em outros produtos.
+
+O uso do firmware é permitido apenas em aparelhos TubaBot originais, adquiridos
+da TubaLabs ou de revendedores autorizados, e dentro das funções oferecidas.
+
+Componentes de terceiros incluídos permanecem sob as próprias licenças, listadas
+em NOTICE.md. Esta licença não restringe os direitos que essas licenças garantem
+sobre esses componentes.
+
+O SOFTWARE É FORNECIDO "NO ESTADO EM QUE SE ENCONTRA", SEM GARANTIAS DE QUALQUER
+TIPO, NA MÁXIMA EXTENSÃO PERMITIDA PELA LEI (Lei nº 9.609/1998 — Lei do Software;
+Lei nº 9.610/1998 — Direitos Autorais).
+
+Contato para licenciamento: TubaLabs.

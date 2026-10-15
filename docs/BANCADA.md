@@ -4,7 +4,7 @@ Faça com a placa **fora do corpo**, ligada ao computador pelo USB-C. Leva uns 1
 
 ## 0. Gravar
 
-- **Navegador (Chrome/Edge):** <https://espressif.github.io/esptool-js/> → *Connect* → arquivos `firmware/dist/tubabot-v3.0.0-completo.bin` em **0x0** e o perfil da unidade (ex.: `firmware/fabrica/fabrica-pro-vermelho.bin`) em **0xFEF000** → *Program*.
+- **Navegador (Chrome/Edge):** <https://espressif.github.io/esptool-js/> → *Connect* → arquivos `firmware/dist/tubabot-v3.1.0-completo.bin` em **0x0** e o perfil da unidade (ex.: `firmware/fabrica/fabrica-pro-vermelho.bin`) em **0xFEF000** → *Program*.
 - **PlatformIO:** `pio run -e tubabot -t upload` e depois `python3 tools/fabrica.py --modelo pro --cor vermelho --gravar`.
 
 Porta não aparece? Segure **BOOT**, toque **RESET**, solte BOOT e tente de novo.
@@ -65,7 +65,7 @@ Se x/y saírem trocados ou espelhados, ajuste `TB_TOUCH_MAP` em `board_profile.h
 | Configure nome, Wi-Fi de casa, cidade | entra na rede de casa; **a hora aparece sozinha** (NTP); clima carrega | |
 | Desligue e ligue | a hora volta pela rede em alguns segundos (a placa não tem RTC) | |
 | Portal → Aparência → Tema claro / cor | a tela muda na hora | |
-| Portal → Sistema → Atualizar firmware com `tubabot-v3.0.0-app-ota.bin` | grava, reinicia, mantém preferências **e o perfil de fábrica** | |
+| Portal → Sistema → Atualizar firmware com `tubabot-v3.1.0-app-ota.bin` | grava, reinicia, mantém preferências **e o perfil de fábrica** | |
 | BOOT 3 s | reabre a rede de configuração | |
 | Sistema → Restaurar padrão de fábrica | volta ao primeiro uso com tema e cor **da unidade** | |
 

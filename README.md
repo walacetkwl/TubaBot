@@ -1,8 +1,8 @@
-# TubaBot v3 — software (firmware, simulador e portal)
+# TubaBot v3.1 — software (firmware, simulador e portal)
 
 Companheiro de mesa da **TubaLabs** na placa **ES3C28P** (ESP32-S3 + tela IPS 2,8" com toque capacitivo, alto-falante, microfone, Wi-Fi e bateria opcional). A tela é usada **em paisagem, 320×240**, e no estado normal **é toda do rosto**.
 
-Um único núcleo C++ (`core/`) contém toda a lógica — gestos, rosto com 34 expressões, personalidade, tema claro/escuro, cor das expressões, perfil de fábrica (Lite/Pro), cinco jogos, Pomodoro, timers, cronômetro, alarmes, lembretes, clima, alertas, persistência, desenho antisserrilhado e a API local. Esse mesmo núcleo é compilado:
+Um único núcleo C++ (`core/`) contém toda a lógica — gestos, rosto com 34 expressões, **reações lendárias**, personalidade, idiomas (pt-BR/en/es), tema claro/escuro, cor das expressões, perfil de fábrica (Lite/Pro), cinco jogos, Pomodoro, timers, cronômetro, alarmes, lembretes, clima, alertas, persistência, desenho antisserrilhado e a API local. Esse mesmo núcleo é compilado:
 
 | Destino | Como | Para quê |
 |---|---|---|
@@ -30,7 +30,9 @@ docs/             hardware, bancada, fábrica, funcionalidades, API, validação
 - [`docs/HARDWARE.md`](docs/HARDWARE.md) e [`docs/BANCADA.md`](docs/BANCADA.md) — placa, montagem e conferência
 - [`docs/FUNCIONALIDADES.md`](docs/FUNCIONALIDADES.md) — tudo o que o TubaBot faz
 - [`docs/VALIDACAO.md`](docs/VALIDACAO.md) — o que foi testado e o que depende da placa
+- [`docs/futuras-atualizacoes.html`](docs/futuras-atualizacoes.html) — atualizações pela internet, painel admin, telemetria e próximas ideias
+- [`docs/PROTECAO.md`](docs/PROTECAO.md) — proteção do código e dos aparelhos (licença proprietária em `LICENSE`)
 
-Galeria com 53 telas reais geradas pelo próprio núcleo: [`docs/telas.png`](docs/telas.png).
+Galeria com 61 telas reais geradas pelo próprio núcleo: [`docs/telas.png`](docs/telas.png).
 
 Versões anteriores ficam no histórico do Git: v1 (ESP32-C3 + OLED, commit `58f7b35`) e v2 (Waveshare AMOLED redonda, commit `47bd3e7`).

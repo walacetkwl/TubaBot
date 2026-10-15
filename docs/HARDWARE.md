@@ -6,6 +6,21 @@ O TubaBot definitivo usa **uma única placa pronta**, a **ES3C28P** (LCDWIKI / Q
 
 Lista de compras com links: [`lista_de_materiais.xlsx`](lista_de_materiais.xlsx).
 
+**Placa efetivamente comprada (out/2026):** AliExpress, loja *Electree Store*, variante **"With Touch, With Speaker"** — <https://pt.aliexpress.com/item/1005012105732485.html> (R$ 105,93 na oferta de 1ª compra). A dona do projeto enviou a captura completa do anúncio; os dados técnicos dele **conferem** com o que o firmware assume:
+
+| Item (anúncio) | Valor | No firmware |
+|---|---|---|
+| SKU | com toque = **ES3C28P** (sem toque = ES3N28P; o título do anúncio mostra "ES3N28P - With Touch", mas a variante com toque é a ES3C28P) | ES3C28P |
+| Módulo | ESP32-S3, Xtensa LX7 dual-core 240 MHz, **N16R8** (16 MB flash, 8 MB PSRAM OPI) | tabela de partições de 16 MB (perfil de fábrica em 0xFEF000) |
+| Tela | 2,8" IPS TFT 240×320, **ILI9341V**, SPI 4 fios, RGB565, 280 cd/m², 4 LEDs de luz de fundo | `Arduino_ILI9341`, paisagem 320×240 |
+| Toque | capacitivo **D-FT6336G**, I²C, 240×320 | FT6336 por I²C (0x38) |
+| Alto-falante | conector 1,25 mm 2 pinos, **máx. 1,5 W/8 Ω ou 2 W/4 Ω** | ES8311 + amplificador |
+| Bateria | conector 1,25 mm 2 pinos, LiPo **3,7 V** com carregador na placa (atenção à polaridade) | TubaBot Pro |
+| Expansão | conector 1,25 mm 4 pinos com **GPIO 2, 3, 14 e 21**; conector I²C de periféricos | livres (ideias: IMU, sensor de presença) |
+| Outros | LED RGB (1 pino), microSD, BOOT, RESET, USB-C, serial 1,25 mm 4 pinos | LED mantido apagado; microSD não usado |
+| Consumo (5 V) | ~140 mA só a tela; ~560 mA com tela, som e carregando a bateria (0,7–2,8 W) | fonte USB de 5 V/1 A sobra |
+| Peso / medidas | 111 g; 50 × 86 × 10,6 mm | corpo do TubaBot |
+
 ## 1. O que vem na placa
 
 | Bloco | Componente | Pinos (GPIO) | Uso no TubaBot |

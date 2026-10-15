@@ -10,7 +10,7 @@
 namespace tb {
 
 // Versão do firmware/núcleo (exibida no portal e em Informações).
-#define TB_VERSION "3.0.0"
+#define TB_VERSION "3.1.0"
 
 // Tempo monotônico em milissegundos (64 bits internos — sem rollover prático).
 typedef uint64_t ms_t;

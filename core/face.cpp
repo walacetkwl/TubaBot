@@ -447,29 +447,33 @@ static EyeShape lerpEye(const EyeShape& a, const EyeShape& b, float p) {
   return r;
 }
 
-void FaceRenderer::draw(Canvas& c, ms_t now, const FaceStyle& st) {
+void FaceRenderer::drawAt(Canvas& c, ms_t now, const FaceStyle& st, float cx, float cy, float s, uint16_t extrasMask) {
   int blink = 0;
   if (blinking_ && now >= blinkStart_) {
     int bt = (int)(now - blinkStart_);
     blink = bt < 70 ? bt * 1000 / 70 : (bt < 95 ? 1000 : tbMax(0, 1000 - (bt - 95) * 1000 / 75));
   }
   Expr cur = microActive_ ? micro_ : target_;
-  const FaceDef* tgt = petting_ && target_ != Expr::Love ? &RELAXED : &faceDef(cur);
+  FaceDef tgtM = petting_ && target_ != Expr::Love ? RELAXED : faceDef(cur);
+  tgtM.extras &= extrasMask;
+  const FaceDef* tgt = &tgtM;
   float breathe = fsin((float)(now % 4200) / 4200.f * kTau);
   FaceXf xf;
-  xf.cy = layoutCy_; xf.s = layoutS_;
-  xf.cx += (float)driftX_; xf.cy += (float)driftY_;
+  xf.cx = cx; xf.cy = cy; xf.s = s;
+  xf.cx += (float)driftX_ * s / FACE_SCALE; xf.cy += (float)driftY_ * s / FACE_SCALE;
   if (dance_) {
     float ph = (float)dancePhase_ / 1000.f;
-    xf.cy -= 16.f * layoutS_ * fabsf_(fsin(ph * kPi));
-    xf.cx += 10.f * layoutS_ * fsin(ph * kPi);
+    xf.cy -= 16.f * s * fabsf_(fsin(ph * kPi));
+    xf.cx += 10.f * s * fsin(ph * kPi);
   }
   if (bounceAt_ && now - bounceAt_ < 320) {
     float p = (float)(now - bounceAt_) / 320.f;
-    xf.s = layoutS_ * (1.f - 0.07f * fsin(p * kPi) * (1.f - p));
+    xf.s = s * (1.f - 0.07f * fsin(p * kPi) * (1.f - p));
   }
   ms_t tt = now - transStart_;
-  const FaceDef& src = faceDef(from_);
+  FaceDef srcM = faceDef(from_);
+  srcM.extras &= extrasMask;
+  const FaceDef& src = srcM;
   if (tt < transMs_ && from_ != cur) {
     float p = easeOut((float)tt / (float)transMs_);
     bool sameKind = src.L.kind == tgt->L.kind && src.R.kind == tgt->R.kind;

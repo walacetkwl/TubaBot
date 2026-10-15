@@ -74,7 +74,14 @@ struct Settings {
   uint8_t showClock;      // informações discretas sobre o rosto (todas desligadas de fábrica)
   uint8_t showWeather;
   uint8_t showBattery;    // só existe no modelo Pro
-  uint8_t reserved[12];
+  // ── novo na v3.1 ──
+  uint8_t language;       // 0 pt-BR, 1 inglês, 2 espanhol (América Latina) — ver i18n.h
+  uint8_t noTelemetry;    // 1 = NÃO enviar estatísticas anônimas (0 = envia, só se houver servidor configurado)
+  uint8_t updSnoozes;     // quantas vezes "mais tarde" foi escolhido para a atualização pendente
+  uint8_t updAuto;        // 1 = instalar sozinho na hora agendada (escolheu "esta noite")
+  char updVersion[16];    // atualização anunciada pelo servidor e ainda não instalada ("" = nenhuma)
+  uint32_t updDueMin;     // quando instalar: minutos desde 1970 (UTC); 0 = perguntar agora
+  uint8_t reserved[24];
 };
 
 // Expressões que podem ser desbloqueadas (bits em Progress::unlocked).
@@ -104,7 +111,15 @@ struct Progress {
   uint16_t breathSessions;   // sessões de respiração concluídas
   uint16_t shakes;
   uint32_t boops;
-  uint8_t reserved[12];
+  // ── novo na v3.1 ──
+  uint16_t legendMask;       // reações lendárias já vistas (bit = SceneId)
+  uint16_t legendDay;        // dia (local, +1) da última lendária espontânea — no máximo uma por dia
+  uint16_t actDay;           // dia (local, +1) da última interação — telemetria "hoje / 7 dias"
+  uint8_t actMask;           // bit 0 = hoje, bit k = há k dias (interagiu)
+  uint8_t reservedA;
+  uint16_t interToday;       // interações no dia actDay
+  uint16_t reservedB;
+  uint8_t reserved[16];
 };
 
 struct TimeCheckpoint {
@@ -147,8 +162,8 @@ void sanitizeSettings(Settings& s);
 // Blob persistido: [magic 'TUBA'][kind][version][len 2B][crc 4B][payload]
 enum class BlobKind : uint8_t { Settings = 1, Progress = 2, Checkpoint = 3 };
 static const int BLOB_HEADER = 12;
-static const uint8_t SETTINGS_VERSION = 3;
-static const uint8_t PROGRESS_VERSION = 2;
+static const uint8_t SETTINGS_VERSION = 4;
+static const uint8_t PROGRESS_VERSION = 3;
 static const uint8_t CHECKPOINT_VERSION = 1;
 static const size_t BLOB_MAX = 1024;
 

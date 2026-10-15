@@ -1,4 +1,4 @@
-# API local do TubaBot v3
+# API local do TubaBot v3.1
 
 Implementada uma única vez em `core/app_api.cpp` e usada igual pelo ESP32 (HTTP) e pelo simulador (postMessage → WebAssembly). Respostas sempre em JSON UTF-8 com `"ok": true|false`.
 
@@ -24,6 +24,10 @@ Implementada uma única vez em `core/app_api.cpp` e usada igual pelo ESP32 (HTTP
 | `/api/wifi` | rede de casa: configurada?, nome, estado, IP (sem senha) |
 | `/api/tz` | fusos suportados (identificador IANA + rótulo) |
 | `/api/ota` | se uma atualização é permitida agora e por quê |
+| `/api/legends` | reações lendárias: `seen`, `total` e itens (`key`, `name`, `hint` só das já vistas; secretas aparecem só como `{seen:false}`) |
+| `/api/telemetry` | prévia exata do que o aparelho envia ao painel da TubaLabs (`enabled`, `serviceConfigured`, `payload`) — sem dados pessoais |
+
+`/api/status` também traz `language`, `legend{seen,total,bond,playing,medal}` e `update{installed,pending,serviceConfigured,auto,dueMin,snoozes,result,checking}`.
 
 ## Alteração (POST, com token)
 
@@ -38,11 +42,13 @@ Implementada uma única vez em `core/app_api.cpp` e usada igual pelo ESP32 (HTTP
 | `/api/wifi` | `{ssid, pass}` | senha vazia ou WPA de 8–63 caracteres |
 | `/update` (só firmware) | multipart com o `.bin` + cabeçalhos `X-Tuba-Token` e `X-Tuba-Size` | recusa se houver Pomodoro/timer/cronômetro/jogo em andamento; valida magic 0xE9, chip ESP32-S3 (id 9) e tamanho |
 
-Ações (`/api/action`): `pomodoro.toggle|skip|cancel`, `timer.start|pause|resume|cancel` (`slot` 0–2, `seconds` opcional 1–86399), `stopwatch.toggle|reset`, `alert.ack`, `alarm.toggle` (`slot` 0–2), `alarm.snooze`, `face` (`expr` desbloqueada), `preview` (`pattern`: boot, tap, double, purr, love, menu, timer, pomodoro, reminder, point, gameover, record, unlock, test, alarm, boop, giggle, dizzy, startled, yawn, babble, swipe, charge, lowbattery, breath — obedece ao hardware e às preferências), `diag.oled` (padrão de teste da tela), `config.open`, `ap.close`, `setup.offline`, `screen.wake`, `screen.sleep`, `weather.refresh`, `reboot`.
+Ações (`/api/action`): `pomodoro.toggle|skip|cancel`, `timer.start|pause|resume|cancel` (`slot` 0–2, `seconds` opcional 1–86399), `stopwatch.toggle|reset`, `alert.ack`, `alarm.toggle` (`slot` 0–2), `alarm.snooze`, `face` (`expr` desbloqueada), `preview` (`pattern`: boot, tap, double, purr, love, menu, timer, pomodoro, reminder, point, gameover, record, unlock, test, alarm, boop, giggle, dizzy, startled, yawn, babble, swipe, charge, lowbattery, breath — obedece ao hardware e às preferências), `diag.oled` (padrão de teste da tela), `config.open`, `ap.close`, `setup.offline`, `screen.wake`, `screen.sleep`, `weather.refresh`, `reboot`, `legend.play` (`scene` já descoberta: repete para os amigos), `legend.open`, `clock.open`, `intro.replay`, `update.check` (buscar atualizações), `update.schedule` (`when`: `now|hour|night`, só com atualização pendente).
+
+Ferramentas de desenvolvedor (simulador, `devTools`): `dev.unlockAll`, `dev.testProfileOff`, `legend.play` com `discover:true` (primeira vez + medalha, em perfil de teste), `dev.bond` (`bond` 0–1000), `dev.legendNow` (roda o sorteio natural agora), `dev.updateInstalled`.
 
 ## Preferências (`prefs`)
 
-`setupDone`, `nickname` (≤12 caracteres, cabe na tela), `personality` (`tranquilo|brincalhao`), `brightness` (1–255; o nome `contrast` da v1 também é aceito), `rotate180`, `favoriteExpr`, `animLevel` (0–2), `screenOffS` (0 ou 30–3600), `shortIntro`, `sound`, `silent`, `vibration`, `pomodoro{focusMin 1–120, shortMin 1–60, longMin 1–90, cyclesBeforeLong 1–12, autoStart}`, `timerPresetsS[6]` (1–86399), `reminders[3]{label 1–16, intervalMin 5–240, enabled}`, `quiet{enabled,startH,endH}`, `tz`, `clock24h`, `jumpEasy`, `apTimeoutMin` (0–120), `weatherEnabled`, `ntpEnabled`, `volume` (0–100), `eyeColor` (cor das expressões: `vermelho|azul|branco|grafite|ciano|verde|lilas|rosa|amarelo|laranja`), `theme` (`escuro|claro`), `showClock`, `showWeather`, `showBattery` (só existe no Pro), `eyeGlow`, `watchFace` (0 digital, 1 analógico, 2 Tuba), `imuReactions`, `micReactions`, `tiltLook`, `faceDownSnooze`, `nightDim`, `wakeOnPickup`, `alarms[3]{label 1–12, hour 0–23, minute 0–59, days bitmask 0–127 (bit0 = domingo; 0 = uma vez), enabled}`, `weather{city (chave da lista ou `custom`), latE4, lonE4}` (graus × 10⁴).
+`setupDone`, `nickname` (≤12 caracteres, cabe na tela), `personality` (`tranquilo|brincalhao`), `brightness` (1–255; o nome `contrast` da v1 também é aceito), `rotate180`, `favoriteExpr`, `animLevel` (0–2), `screenOffS` (0 ou 30–3600), `shortIntro`, `sound`, `silent`, `vibration`, `pomodoro{focusMin 1–120, shortMin 1–60, longMin 1–90, cyclesBeforeLong 1–12, autoStart}`, `timerPresetsS[6]` (1–86399), `reminders[3]{label 1–16, intervalMin 5–240, enabled}`, `quiet{enabled,startH,endH}`, `tz`, `clock24h`, `jumpEasy`, `apTimeoutMin` (0–120), `weatherEnabled`, `ntpEnabled`, `volume` (0–100), `eyeColor` (cor das expressões: `vermelho|azul|branco|grafite|ciano|verde|lilas|rosa|amarelo|laranja`), `theme` (`escuro|claro`), `language` (`pt-BR|en|es-419`), `telemetry` (estatísticas anônimas), `showClock`, `showWeather`, `showBattery` (só existe no Pro), `eyeGlow`, `watchFace` (0 digital, 1 analógico, 2 Tuba), `imuReactions`, `micReactions`, `tiltLook`, `faceDownSnooze`, `nightDim`, `wakeOnPickup`, `alarms[3]{label 1–12, hour 0–23, minute 0–59, days bitmask 0–127 (bit0 = domingo; 0 = uma vez), enabled}`, `weather{city (chave da lista ou `custom`), latE4, lonE4}` (graus × 10⁴).
 
 O **modelo (Lite/Pro) e a cor física não são preferências**: não existem em `prefs` e só mudam pelo perfil de fábrica (`tools/fabrica.py` / comando serial `fabrica-gravar`).
 

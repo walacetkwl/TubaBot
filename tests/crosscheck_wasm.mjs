@@ -15,6 +15,12 @@ const n = x.sim_factory_compose(put('modelo=pro\ncor=vermelho\ntema=escuro\n'));
 const fab = cstr(x.sim_outbuf()); if (n < 0) throw new Error('perfil: ' + fab);
 x.sim_factory_set(put(fab));
 x.sim_init(99, 1, 0, 1 | 8 | 16);
+const wstr = (ptr, cap, s) => { const b = enc.encode(s); new Uint8Array(mem.buffer, ptr, b.length + 1).set([...b, 0]); return b.length; };
+const K = ['relogio', 'joinha', 'peixe', 'peixe_come', 'cafe', 'meditacao', 'escada', 'ouvidos', 'bocejo'], L = ['pt-BR', 'en', 'es-419'];
+function api(path, body, now) {
+  wstr(x.sim_methodbuf(), 8, 'POST'); wstr(x.sim_pathbuf(), 128, path); wstr(x.sim_tokenbuf(), 40, cstr(x.sim_token()));
+  return x.sim_api(put(JSON.stringify(body)), 1, 1, now);
+}
 let t = 0;
 for (const [target, type, a, b, c] of rows) {
   while (t + 10 <= target) { t += 10; if (x.sim_tick(t)) x.sim_presented(t); }
@@ -22,4 +28,7 @@ for (const [target, type, a, b, c] of rows) {
   else if (type === 0 || type === 1) x.sim_touch(type, a, b, target);
   else if (type === 2) x.sim_motion(a, b, c, target);
   else if (type === 3) x.sim_sound(a, target);
+  else if (type === 4) api('/api/action', { action: 'legend.play', scene: K[a], discover: true }, target);
+  else if (type === 5) api('/api/prefs', { language: L[a] }, target);
+  else if (type === 6) api('/api/action', { action: 'legend.open' }, target);
 }

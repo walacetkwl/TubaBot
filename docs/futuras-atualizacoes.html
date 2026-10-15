@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TubaBot · Futuras atualizações</title>
+<style>
+:root{
+  --bg:#070d1c;--bg2:#0d1630;--card:#111c38;--line:#22325a;--ink:#eaf0ff;--muted:#9aaacd;--dim:#6c7ca3;
+  --red:#ff5a63;--blue:#4c8dff;--green:#36d399;--yellow:#ffd54a;--lilac:#b592ff;--cyan:#3ee6ff;
+  --ok-bg:#0f3a2b;--wip-bg:#3a300f;--todo-bg:#24304f;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --bg:#f4f7fd;--bg2:#e9effb;--card:#fff;--line:#d6dff0;--ink:#13203f;--muted:#4c5d82;--dim:#7d8bab;
+  --ok-bg:#dcf7ea;--wip-bg:#fff2cc;--todo-bg:#e6ecf8;
+}}
+:root[data-theme="light"]{--bg:#f4f7fd;--bg2:#e9effb;--card:#fff;--line:#d6dff0;--ink:#13203f;--muted:#4c5d82;--dim:#7d8bab;--ok-bg:#dcf7ea;--wip-bg:#fff2cc;--todo-bg:#e6ecf8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--blue)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header.hero{background:radial-gradient(900px 420px at 15% -20%,rgba(76,141,255,.35),transparent),radial-gradient(700px 380px at 95% 0,rgba(255,90,99,.25),transparent),var(--bg2);border-bottom:1px solid var(--line);padding:56px 0 40px}
+.hero h1{font-size:clamp(30px,5vw,46px);line-height:1.1;margin:0 0 10px;letter-spacing:-.02em}
+.hero p{color:var(--muted);max-width:720px;margin:0;font-size:17px}
+.tag{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);margin-bottom:14px}
+.face{float:right;width:150px;height:110px;border-radius:26px;background:#05070c;box-shadow:0 0 0 8px #c9303a,0 20px 40px rgba(0,0,0,.35);position:relative;margin:0 0 20px 24px}
+.face i{position:absolute;top:26px;width:34px;height:44px;border-radius:12px 12px 8px 8px;background:var(--red);box-shadow:0 0 18px rgba(255,90,99,.6)}
+.face i:first-child{left:32px}.face i:nth-child(2){right:32px}
+.face b{position:absolute;left:62px;bottom:20px;width:26px;height:12px;border:4px solid var(--red);border-top:0;border-radius:0 0 18px 18px}
+@media (max-width:640px){.face{display:none}}
+nav.toc{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav.toc .wrap{display:flex;gap:6px;overflow-x:auto;padding:10px 20px}
+nav.toc a{white-space:nowrap;text-decoration:none;color:var(--muted);font-size:14px;padding:6px 12px;border-radius:99px;border:1px solid var(--line)}
+nav.toc a:hover{color:var(--ink);border-color:var(--blue)}
+section{padding:44px 0 8px}
+section h2{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+section > .wrap > p.lead{color:var(--muted);margin:0 0 22px;max-width:780px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px}
+.card h3{margin:0 0 8px;font-size:17px}
+.card p,.card li{color:var(--muted);font-size:15px}
+.card ul{padding-left:18px;margin:8px 0 0}
+.status{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;margin-bottom:10px}
+.s-ok{background:var(--ok-bg);color:var(--green)}.s-wip{background:var(--wip-bg);color:#d6a400}.s-todo{background:var(--todo-bg);color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.kpi b{display:block;font-size:30px;line-height:1.1}
+.kpi span{color:var(--muted);font-size:13px}
+.flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0}
+.step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;font-size:14px}
+.arrow{color:var(--dim)}
+pre{background:#060b18;color:#d6e2ff;border:1px solid var(--line);border-radius:14px;padding:16px;overflow:auto;font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;background:var(--bg2)}
+tr:last-child td{border-bottom:0}
+.table-wrap{overflow-x:auto}
+.timeline{border-left:3px solid var(--line);margin:10px 0 0 8px;padding-left:22px}
+.timeline .t{position:relative;margin:0 0 22px}
+.timeline .t:before{content:"";position:absolute;left:-31px;top:6px;width:14px;height:14px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 4px var(--bg)}
+.timeline .t h4{margin:0;font-size:16px}
+.timeline .t p{margin:2px 0 0;color:var(--muted);font-size:15px}
+.note{border-left:4px solid var(--yellow);background:var(--card);padding:12px 16px;border-radius:0 12px 12px 0;color:var(--muted);font-size:15px;margin:16px 0}
+footer{color:var(--dim);font-size:13px;padding:40px 0 60px;border-top:1px solid var(--line);margin-top:40px}
+.dash{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;margin-top:10px}
+.dash .bar{height:10px;border-radius:10px;background:var(--bg2);overflow:hidden;margin:6px 0 12px}
+.dash .bar i{display:block;height:100%}
+.legend-chip{display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:6px 12px;margin:4px;font-size:14px}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="face" aria-hidden="true"><i></i><i></i><b></b></div>
+    <span class="tag">TubaLabs · planejamento</span>
+    <h1>Futuras atualizações do TubaBot</h1>
+    <p>O que já está preparado no aparelho (v3.1) e o que falta construir fora dele: servidor de atualizações, painel administrativo, telemetria, proteção e as próximas ideias. Documento vivo — atualize a cada entrega.</p>
+  </div>
+</header>
+<nav class="toc"><div class="wrap">
+  <a href="#estado">Estado</a><a href="#ota">Atualizações</a><a href="#painel">Painel admin</a><a href="#telemetria">Telemetria</a><a href="#fabrica">Séries</a><a href="#protecao">Proteção</a><a href="#idiomas">Idiomas</a><a href="#lendarias">Lendárias</a><a href="#ideias">Ideias</a><a href="#roteiro">Roteiro</a>
+</div></nav>
+
+<section id="estado"><div class="wrap">
+  <h2>Onde estamos</h2>
+  <p class="lead">Tudo o que depende do aparelho já está no firmware e testado no simulador. O que falta é infraestrutura na nuvem — que pode ser ligada depois, por configuração, sem trocar o firmware das unidades vendidas.</p>
+  <div class="grid">
+    <div class="card"><span class="status s-ok">pronto no aparelho</span><h3>Atualização obrigatória e adiável</h3><p>Consulta de manifesto, aviso na tela, "Agora / Em 1 hora (até 3×) / Esta noite", instalação automática às 3h, conferência de SHA-256, tentativa de novo se falhar. Sem opção de ignorar.</p></div>
+    <div class="card"><span class="status s-ok">pronto no aparelho</span><h3>Telemetria anônima</h3><p>Sinal de vida a cada 10 min com série, modelo, versão, ativação e uso de hoje / 7 dias. Prévia local em <code>GET /api/telemetry</code>. Usuário desliga em Sistema.</p></div>
+    <div class="card"><span class="status s-ok">pronto no aparelho</span><h3>Idiomas</h3><p>Português, inglês e espanhol (América Latina) na tela, escolhidos pelo usuário ou de fábrica (<code>idioma=</code> no perfil).</p></div>
+    <div class="card"><span class="status s-ok">pronto no aparelho</span><h3>Reações lendárias</h3><p>9 cenas raras com mãos e objetos, medalha na primeira vez, coleção com secretas e replay.</p></div>
+    <div class="card"><span class="status s-wip">falta o servidor</span><h3>Servidor de atualizações</h3><p>Hospedar manifesto + binários assinados; lançamento gradual por série/porcentagem.</p></div>
+    <div class="card"><span class="status s-wip">falta o servidor</span><h3>Painel administrativo</h3><p>Receber a telemetria e mostrar unidades online, ativas hoje / 7 dias, offline e não ativadas.</p></div>
+    <div class="card"><span class="status s-todo">antes de vender</span><h3>Secure Boot + criptografia</h3><p>Chave de assinatura e ambiente de produção (ver <code>docs/PROTECAO.md</code>).</p></div>
+    <div class="card"><span class="status s-todo">próximo</span><h3>Portal em 3 idiomas</h3><p>A tela do aparelho já está traduzida; o portal web ainda está só em português.</p></div>
+  </div>
+</div></section>
+
+<section id="ota"><div class="wrap">
+  <h2>Atualizações pela internet (OTA)</h2>
+  <p class="lead">Objetivo: lançar uma versão e ela chegar a todos os TubaBots — os que estão online agora e os que estiverem desligados ou sem Wi-Fi, assim que conectarem. O usuário pode adiar, mas nunca ignorar.</p>
+  <div class="flow">
+    <span class="step">Publicamos v3.2.0 + manifesto</span><span class="arrow">→</span>
+    <span class="step">Tuba conecta / a cada 6 h / "Buscar"</span><span class="arrow">→</span>
+    <span class="step">Aviso na tela</span><span class="arrow">→</span>
+    <span class="step">Agora · Em 1 hora · Esta noite</span><span class="arrow">→</span>
+    <span class="step">Download + SHA-256 + assinatura</span><span class="arrow">→</span>
+    <span class="step">Reinicia já atualizado</span>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Regras no aparelho (prontas)</h3><ul>
+      <li>Busca o manifesto ao conectar, a cada 6 h e no botão <b>Buscar atualizações</b> (Sistema → Atualizações e Informações → Sobre).</li>
+      <li>Aviso só em momento oportuno: nunca durante jogo, foco do Pomodoro, alerta ou reação lendária.</li>
+      <li>"Em 1 hora" no máximo 3 vezes; depois só "Agora" ou "Esta noite". Sem resposta em 60 s = adiado.</li>
+      <li>"Esta noite" instala sozinho às 3h (se alguém estiver usando, tenta de novo em 30 min).</li>
+      <li>A versão pendente fica gravada: desligar não apaga o aviso.</li>
+      <li>Falha no download → tenta de novo em 1 h; o firmware atual continua funcionando (partições A/B).</li>
+    </ul></div>
+    <div class="card"><h3>O que construir no servidor</h3><ul>
+      <li>Hospedagem estática com HTTPS (ex.: bucket + CDN) para manifesto e binários.</li>
+      <li>Manifesto por canal: <code>estavel.json</code>, <code>beta.json</code>.</li>
+      <li>Lançamento gradual: o aparelho envia <code>fw</code>, <code>model</code> e <code>serial</code> na consulta; uma função simples devolve a versão nova só para X% das séries.</li>
+      <li>Botão "pausar lançamento" se aparecerem falhas no painel.</li>
+      <li>Binário sempre assinado (Secure Boot v2).</li>
+    </ul></div>
+  </div>
+  <h3 style="margin-top:22px">Manifesto (formato que o firmware já entende)</h3>
+<pre>GET https://atualiza.tubalabs.com.br/tubabot/es3c28p/estavel.json?fw=3.1.0&amp;model=pro&amp;serial=TB3-PVM-2610-00042
+{
+  "version": "3.2.0",
+  "url": "https://atualiza.tubalabs.com.br/tubabot/es3c28p/tubabot-3.2.0-app-ota.bin",
+  "sha256": "9f2c…(64 hex)…",
+  "size": 1560000,
+  "notes": { "pt-BR": "Novas reações e melhorias", "en": "New reactions and improvements", "es-419": "Nuevas reacciones y mejoras" }
+}</pre>
+  <div class="note">Para ligar no firmware: <code>-DTB_UPDATE_URL=\"https://…/estavel.json\"</code> no <code>platformio.ini</code> (vazio = desligado). Opcional: <code>-DTB_SERVICE_CA</code> para fixar o certificado TLS. Unidades já vendidas com a URL configurada passam a receber atualizações assim que o manifesto existir.</div>
+</div></section>
+
+<section id="painel"><div class="wrap">
+  <h2>Painel administrativo</h2>
+  <p class="lead">Uma página interna da TubaLabs para acompanhar a frota. Exemplo do que ele vai mostrar (números ilustrativos):</p>
+  <div class="kpis">
+    <div class="kpi"><b>1.284</b><span>registrados na fábrica</span></div>
+    <div class="kpi"><b style="color:var(--green)">412</b><span>online agora (sinal &lt; 15 min)</span></div>
+    <div class="kpi"><b style="color:var(--blue)">688</b><span>com interação hoje</span></div>
+    <div class="kpi"><b style="color:var(--lilac)">951</b><span>ativos nos últimos 7 dias</span></div>
+    <div class="kpi"><b style="color:var(--yellow)">203</b><span>offline há mais de 7 dias</span></div>
+    <div class="kpi"><b style="color:var(--red)">130</b><span>nunca ativados</span></div>
+  </div>
+  <div class="dash">
+    <b>Versões em uso</b>
+    <div class="bar"><i style="width:64%;background:var(--green)"></i></div>
+    <span style="color:var(--muted);font-size:14px">3.2.0 — 64% · 3.1.0 — 31% · anteriores — 5%</span>
+  </div>
+  <div class="grid" style="margin-top:16px">
+    <div class="card"><h3>Visões</h3><ul>
+      <li><b>Frota</b>: online agora, ativos hoje / 7 / 30 dias, offline, nunca ativados.</li>
+      <li><b>Por unidade</b>: série, modelo (Lite/Pro), cor, versão, idioma, último sinal, dias ativos, lendárias descobertas, atualização pendente.</li>
+      <li><b>Por versão</b>: adoção de cada lançamento, falhas de atualização, quem está adiando.</li>
+      <li><b>Por modelo e cor</b>: vendas × ativação.</li>
+      <li><b>Bateria</b> (Pro): unidades com bateria fraca recorrente.</li>
+    </ul></div>
+    <div class="card"><h3>Definições</h3><ul>
+      <li><b>Online agora</b>: último sinal há menos de 15 min (o aparelho envia a cada 10 min).</li>
+      <li><b>Interação hoje</b>: <code>interactedToday</code> verdadeiro no último sinal do dia.</li>
+      <li><b>Ativos 7 dias</b>: <code>activeDays7 ≥ 1</code>.</li>
+      <li><b>Não ativado</b>: série no registro de fábrica que nunca enviou sinal, ou que envia <code>activated:false</code> (não concluiu o primeiro uso).</li>
+      <li><b>Offline</b>: já deu sinal, mas não há sinal há mais de N dias.</li>
+    </ul></div>
+    <div class="card"><h3>Como construir (sugestão enxuta)</h3><ul>
+      <li>API pequena (ex.: Cloudflare Workers / Supabase / Firebase) com <code>POST /telemetria</code>.</li>
+      <li>Tabela <code>unidades</code> (do registro de fábrica) + <code>sinais</code> (último sinal por série, histórico diário).</li>
+      <li>Painel web com login da equipe (só leitura para a maioria).</li>
+      <li>Importar <code>firmware/fabrica/registro.csv</code> a cada lote.</li>
+    </ul></div>
+  </div>
+</div></section>
+
+<section id="telemetria"><div class="wrap">
+  <h2>Telemetria (já enviada pelo aparelho)</h2>
+  <p class="lead">Mínima, anônima e transparente. O usuário vê exatamente o mesmo conteúdo em <code>/api/telemetry</code> e pode desligar em Sistema → Estatísticas anônimas.</p>
+<pre>POST https://painel.tubalabs.com.br/telemetria      (a cada 10 min quando conectado; espaça se falhar)
+{
+  "schema": 1, "serial": "TB3-PVM-2610-00042", "deviceId": "A1B2C3D4E5F6",
+  "model": "pro", "body": "vermelho", "factoryProfile": true,
+  "fw": "3.1.0", "lang": "pt-BR", "activated": true, "uptimeMin": 1312,
+  "interactedToday": true, "interactionsToday": 37, "activeDays7": 6,
+  "bond": 412, "pets": 128, "pomodoros": 19, "games": 44, "legendary": 3,
+  "pendingUpdate": "", "batteryPct": 76
+}</pre>
+  <div class="table-wrap"><table>
+    <tr><th>Nunca enviado</th><th>Por quê</th></tr>
+    <tr><td>apelido, nome da rede, senha, IP público, localização</td><td>dados pessoais — fora de escopo (LGPD: minimização)</td></tr>
+    <tr><td>áudio, nível do microfone, toques/coordenadas</td><td>o microfone só gera nível dentro do chip; nada sai do aparelho</td></tr>
+  </table></div>
+  <div class="note">LGPD: incluir no manual e na embalagem um aviso de privacidade (o que é coletado, para quê, como desligar) e responder pedidos de exclusão por série. Ligar com <code>-DTB_TELEMETRY_URL=\"https://…/telemetria\"</code>.</div>
+</div></section>
+
+<section id="fabrica"><div class="wrap">
+  <h2>Número de série e registro de fábrica</h2>
+  <p class="lead">Cada TubaBot ganha uma série única na bancada, que vai no perfil de fábrica e no registro (base do "não ativados" do painel).</p>
+<pre>python3 tools/fabrica.py --modelo pro --cor vermelho --idioma pt-BR --serie auto --gravar --porta /dev/cu.usbmodem1101
+#  série TB3-PVM-2610-00042 registrada em firmware/fabrica/registro.csv</pre>
+  <div class="grid">
+    <div class="card"><h3>Formato da série</h3><p><code>TB3-&lt;P|L&gt;&lt;cor&gt;-&lt;AAMM&gt;-&lt;NNNNN&gt;</code> — geração (TB3), Pro/Lite, cor (VM, AZ, BR, GF), ano/mês de fabricação e sequência global.</p></div>
+    <div class="card"><h3>Próximos passos</h3><ul><li>Etiqueta/QR da série na base do corpo e na caixa.</li><li>Registro importado no painel a cada lote.</li><li>Garantia e suporte buscando pela série.</li></ul></div>
+  </div>
+</div></section>
+
+<section id="protecao"><div class="wrap">
+  <h2>Proteção contra cópias</h2>
+  <div class="grid">
+    <div class="card"><span class="status s-ok">pronto</span><h3>Jurídico</h3><p><code>LICENSE</code> proprietária (Lei 9.609/98) e <code>NOTICE.md</code> com as licenças de terceiros.</p></div>
+    <div class="card"><span class="status s-ok">pronto</span><h3>Repositório privado</h3><p>Manter privado; o simulador (WASM) não deve ser publicado aberto.</p></div>
+    <div class="card"><span class="status s-todo">antes de vender</span><h3>Secure Boot v2 + Flash Encryption</h3><p>Só firmware assinado pela TubaLabs roda; a flash lida de um aparelho não serve em outro. Passo a passo em <code>docs/PROTECAO.md</code>.</p></div>
+    <div class="card"><span class="status s-todo">com o servidor</span><h3>Serviços só para séries válidas</h3><p>Atualizações e painel conferem a série; clones sem série registrada não recebem nada.</p></div>
+  </div>
+</div></section>
+
+<section id="idiomas"><div class="wrap">
+  <h2>Idiomas</h2>
+  <div class="grid">
+    <div class="card"><span class="status s-ok">pronto</span><h3>Tela do aparelho</h3><p>pt-BR, en, es-419; todas as telas auditadas (<code>make i18n-audit</code>). Fontes com ñ, ¿, ¡.</p></div>
+    <div class="card"><span class="status s-todo">próximo</span><h3>Portal e assistente</h3><p>Traduzir o portal com o mesmo dicionário (idioma vem de <code>/api/prefs</code>).</p></div>
+    <div class="card"><span class="status s-todo">depois</span><h3>Formatos locais</h3><p>Separador decimal (7.94 × 7,94), 12 h por padrão em inglês, unidades °F opcionais.</p></div>
+  </div>
+</div></section>
+
+<section id="lendarias"><div class="wrap">
+  <h2>Reações lendárias</h2>
+  <p class="lead">Hoje são 9. Novas podem chegar por atualização (aparecem como "secretas" na coleção) — ótimo motivo para manter os Tubas atualizados.</p>
+  <div>
+    <span class="legend-chip">🕒 Olhar o relógio</span><span class="legend-chip">👍 Joinha</span><span class="legend-chip">🐟 Peixinho passando</span><span class="legend-chip">😋 Pegou o peixe!</span><span class="legend-chip">☕ Cafezinho (manhã)</span><span class="legend-chip">🧘 Meditação</span><span class="legend-chip">🛗 Escada rolante</span><span class="legend-chip">🙉 Que barulho!</span><span class="legend-chip">🥱 Bocejo (noite)</span>
+  </div>
+  <div class="grid" style="margin-top:16px">
+    <div class="card"><h3>Ideias para as próximas</h3><ul><li>Aniversário do Tuba (data de ativação): bolo e velinha.</li><li>Dia de chuva (com clima ligado): guarda-chuva.</li><li>Sexta à tarde: óculos escuros.</li><li>Datas especiais: Natal, Carnaval, São João.</li><li>Depois de 25 Pomodoros: "medalha de foco".</li></ul></div>
+    <div class="card"><h3>Regras atuais</h3><ul><li>Não podem ser pedidas por toque.</li><li>No máximo 1 por dia; nem todo dia (18% a 55% conforme a afinidade).</li><li>Só com alguém por perto (interação nos últimos 30 min).</li><li>Prefere as ainda não vistas; medalha na primeira vez.</li></ul></div>
+  </div>
+</div></section>
+
+<section id="ideias"><div class="wrap">
+  <h2>Outras ideias que fazem sentido</h2>
+  <div class="grid">
+    <div class="card"><h3>Backup na nuvem</h3><p>Recordes, coleção e afinidade guardados pela série: trocar de aparelho sem perder o "vínculo".</p></div>
+    <div class="card"><h3>App / Bluetooth</h3><p>Configuração pelo celular via BLE (sem trocar de rede Wi-Fi).</p></div>
+    <div class="card"><h3>Avisos do celular</h3><p>Tuba reage a notificações escolhidas (reunião, mensagem de alguém especial).</p></div>
+    <div class="card"><h3>Tubas amigos</h3><p>Dois Tubas na mesma rede se cumprimentam e jogam juntos.</p></div>
+    <div class="card"><h3>Canal beta</h3><p>Grupo de clientes testando versões antes do lançamento geral.</p></div>
+    <div class="card"><h3>Diagnóstico remoto</h3><p>Com autorização do usuário: últimos erros e reinícios no painel para suporte.</p></div>
+  </div>
+</div></section>
+
+<section id="roteiro"><div class="wrap">
+  <h2>Roteiro sugerido</h2>
+  <div class="timeline">
+    <div class="t"><h4>1. Bancada com a placa real</h4><p>Confirmar tela, toque, som, microfone e bateria (docs/BANCADA.md).</p></div>
+    <div class="t"><h4>2. Servidor de atualizações (estático)</h4><p>Manifesto + binário; ligar <code>TB_UPDATE_URL</code>; testar OTA de ponta a ponta.</p></div>
+    <div class="t"><h4>3. Segurança de produção</h4><p>Chave de assinatura, Secure Boot v2 e Flash Encryption em placas de teste.</p></div>
+    <div class="t"><h4>4. Painel v1</h4><p>Receber telemetria, importar registro de séries, KPIs da frota.</p></div>
+    <div class="t"><h4>5. Portal em 3 idiomas + aviso de privacidade</h4><p>Antes de vender fora do Brasil.</p></div>
+    <div class="t"><h4>6. Novas lendárias por atualização</h4><p>Primeiro lançamento "com novidade" para validar o fluxo inteiro com clientes.</p></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">TubaLabs · TubaBot v3.1 · gerado junto com o firmware. Arquivos relacionados: <code>docs/PROTECAO.md</code>, <code>docs/API.md</code>, <code>docs/FABRICA.md</code>, <code>core/app_online.cpp</code>.</div></footer>
+</body>
+</html>

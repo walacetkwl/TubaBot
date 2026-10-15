@@ -7,10 +7,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <set>
 
 using namespace tb;
 
 static uint16_t fb[SCR_W * SCR_H];
+static int g_langOpt = 0;                 // TB_LANG=en|es: gera as telas em outro idioma
+static std::set<std::string> g_missing;   // TB_TR_AUDIT=1: textos desenhados sem tradução
+static void onMiss(const char* t) { g_missing.insert(t); }
 static std::string outDir = ".";
 static int shot = 0;
 
@@ -34,6 +38,7 @@ struct Rig {
     FactoryConfig fc; parseFactory(plat.factory, plat.factoryLen, fc);
     Settings s; defaultSettings(s); applyFactoryDefaults(fc, s);
     s.setupDone = setup ? 1 : 0; tbStrlcpy(s.nickname, "Tubarãozinho", sizeof s.nickname);
+    s.language = (uint8_t)g_langOpt;
     s.weatherEnabled = 1;
     uint8_t buf[BLOB_MAX]; size_t n = encodeBlob(BlobKind::Settings, SETTINGS_VERSION, &s, sizeof s, buf, sizeof buf);
     plat.storageSave(BlobKind::Settings, buf, n);
@@ -62,6 +67,9 @@ struct Rig {
 
 int main(int argc, char** argv) {
   if (argc > 1) outDir = argv[1];
+  if (const char* l = getenv("TB_LANG")) { Lang x = langFromKey(l); if (x != Lang::Count) g_langOpt = (int)x; }
+  bool audit = getenv("TB_TR_AUDIT") != nullptr;
+  if (audit) g_trMiss = onMiss;
   {
     Rig r(false);
     r.run(400); save(*r.app, "abertura_mar");
@@ -134,6 +142,30 @@ int main(int argc, char** argv) {
   {
     Rig g(true, Model::Lite, 3, 1);  // grafite, claro
     g.run(7500); save(*g.app, "rosto_grafite_claro");
+  }
+  {
+    // v3.1: reações lendárias, medalha, coleção, idioma e atualização
+    Rig v;
+    v.run(7500);
+    auto act = [&](const char* json) {
+      char out[2048]; StrBuf sb(out, sizeof out); ApiCtx ctx; ctx.token = v.app->sessionToken(); ctx.devTools = true;
+      v.app->api("POST", "/api/action", json, strlen(json), ctx, sb, v.t);
+    };
+    act("{\"action\":\"legend.play\",\"scene\":\"cafe\",\"discover\":true}"); v.run(2000); save(*v.app, "lendaria_cafe");
+    v.run(4700); save(*v.app, "lendaria_medalha");
+    act("{\"action\":\"legend.play\",\"scene\":\"escada\",\"discover\":true}"); v.run(4600); save(*v.app, "lendaria_escada_tchau");
+    v.run(5000);
+    act("{\"action\":\"legend.play\",\"scene\":\"joinha\",\"discover\":true}"); v.run(900); save(*v.app, "lendaria_joinha");
+    v.run(3000);
+    act("{\"action\":\"legend.play\",\"scene\":\"ouvidos\",\"discover\":true}"); v.run(1200); save(*v.app, "lendaria_ouvidos");
+    v.run(8000);   // espera a medalha sumir
+    v.go(Screen::Legends); save(*v.app, "lendarias_colecao");
+    v.go(Screen::Language); save(*v.app, "idioma");
+    v.go(Screen::Update); save(*v.app, "atualizacoes");
+  }
+  if (audit) {
+    for (const std::string& m : g_missing) printf("SEM TRADUÇÃO: \"%s\"\n", m.c_str());
+    printf("%d textos sem tradução\n", (int)g_missing.size());
   }
   return 0;
 }
