@@ -1,0 +1,36 @@
+// Identificadores internos de botões e itens de lista (compartilhados entre
+// app.cpp, app_draw.cpp e app_api.cpp). Não fazem parte da API pública.
+#pragma once
+
+namespace tb {
+
+enum ButtonId {
+  B_NONE = 0, B_BACK, B_OK, B_CANCEL,
+  B_PLAY, B_SKIP, B_RESET, B_LAP,
+  B_TIMER_SEL0 = 10, B_TIMER_SEL1, B_TIMER_SEL2, B_TIMER_DUR, B_TIMER_REPEAT, B_TIMER_CANCEL,
+  B_ALARM_TOGGLE0 = 20, B_ALARM_TOGGLE1, B_ALARM_TOGGLE2,
+  B_ALARM_OPEN0 = 25, B_ALARM_OPEN1, B_ALARM_OPEN2,
+  B_AL_H_MINUS = 30, B_AL_H_PLUS, B_AL_M_MINUS, B_AL_M_PLUS, B_AL_ENABLE, B_AL_DONE,
+  B_AL_DAY0 = 40,  // ... B_AL_DAY0 + 6
+  B_EXPR_PREV = 50, B_EXPR_NEXT, B_EXPR_USE,
+  B_BREATH_PLAY = 55, B_BREATH_MODE,
+  B_DICE_MODE = 58, B_DICE_ROLL,
+  B_Q_SILENT = 60, B_Q_MIC, B_Q_TORCH, B_Q_NET, B_Q_BRIGHT, B_Q_VOL,
+  B_PAGE_NEXT = 70, B_PAGE_PREV, B_CFG_CLOSE, B_FIRST_OFFLINE,
+  B_RESUME_YES = 75, B_RESUME_NO, B_REC_YES, B_REC_NO,
+  B_ALERT_OK = 80, B_ALERT_SNOOZE,
+  B_WEATHER_REFRESH = 85,
+};
+
+enum ListId {
+  L_CLOCK = 100, L_POMO, L_TIMERS, L_SW, L_ALARMS, L_GAMES, L_EXPR, L_BREATH, L_LEVEL, L_DICE, L_WEATHER, L_STATS,
+  L_SETTINGS, L_INFO,
+  L_GAME0 = 200,     // ... + GameId
+  L_PRESET0 = 300,   // ... + TIMER_PRESET_COUNT
+  S_BRIGHT = 400, S_VOLUME, S_EYE, S_GLOW, S_FACE, S_PERS, S_ANIM, S_24H, S_SCREENOFF, S_IMU, S_MIC, S_VIB, S_SILENT,
+  S_ROTATE, S_NET, S_INFO,
+};
+
+enum ConfirmId { C_NONE = 0, C_CANCEL_POMO, C_SW_RESET };
+
+}  // namespace tb

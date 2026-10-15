@@ -1,59 +1,96 @@
-// Gera docs/telas.pbm com várias telas reais produzidas pelo núcleo (mesmo
-// framebuffer do firmware). Uso: make screens
+// Gera imagens reais das telas do TubaBot v2 a partir do núcleo (o mesmo
+// código do firmware). Saída: um .ppm por tela em <pasta>; o Makefile monta
+// docs/telas.png com tools/gallery.py.
 #include "../tests/fake_platform.h"
 #include <cstdio>
-#include <vector>
+#include <cstdlib>
 #include <string>
+
 using namespace tb;
 
-struct Shot { std::string name; Framebuffer fb; };
-static std::vector<Shot> shots;
+static uint16_t fb[SCR_W * SCR_H];
+static std::string outDir = ".";
+static int shot = 0;
 
-struct Sim {
-  FakePlatform plat; App app{plat}; ms_t t = 0;
-  Sim(Model m, bool setup = true) {
-    if (setup) { Settings s; defaultSettings(s); s.setupDone = 1; tbStrlcpy(s.nickname, "Walace", sizeof s.nickname);
-      uint8_t b[600]; size_t n = encodeBlob(BlobKind::Settings, SETTINGS_VERSION, &s, sizeof s, b, sizeof b); plat.storageSave(BlobKind::Settings, b, n); }
-    app.begin(m, 0, 77, true);
+static void save(App& a, const char* name) {
+  char path[512];
+  snprintf(path, sizeof path, "%s/%02d_%s.ppm", outDir.c_str(), shot++, name);
+  FILE* f = fopen(path, "wb");
+  if (!f) { perror(path); exit(1); }
+  fprintf(f, "P6 %d %d 255\n", SCR_W, SCR_H);
+  const uint16_t* px = a.canvas().pixels();
+  for (int i = 0; i < SCR_W * SCR_H; i++) { Color c = from565(px[i]); fputc((int)(c >> 16), f); fputc((int)((c >> 8) & 255), f); fputc((int)(c & 255), f); }
+  fclose(f);
+}
+
+struct Rig {
+  FakePlatform plat;
+  App* app;
+  ms_t t = 0;
+  explicit Rig(bool setup = true) {
+    Settings s; defaultSettings(s); s.setupDone = setup ? 1 : 0; tbStrlcpy(s.nickname, "Tubarãozinho", sizeof s.nickname);
+    s.weatherEnabled = 1;
+    uint8_t buf[BLOB_MAX]; size_t n = encodeBlob(BlobKind::Settings, SETTINGS_VERSION, &s, sizeof s, buf, sizeof buf);
+    plat.storageSave(BlobKind::Settings, buf, n);
+    app = new App(plat);
+    app->attachFramebuffer(fb);
+    HwCaps caps; caps.motor = true;
+    app->begin(caps, t, 1234, true);
+    app->setTime(1792069500, t);  // 2026-10-14 10:25 (UTC-3: 07:25)
+    PowerState p; p.known = true; p.battery = true; p.percent = 76; p.charging = false; p.usb = false; p.mv = 3940;
+    app->powerUpdate(p, t);
+    app->motionSample(0, 1000, 0, t);
   }
-  void run(ms_t ms) { ms_t e = t + ms; while (t < e) { t += 10; if (app.tick(t)) app.framePresented(t); } }
-  void lvl(bool v) { app.touchSample(v, t); }
-  void tap() { lvl(true); run(80); lvl(false); run(420); }
-  void hold(ms_t ms) { lvl(true); run(ms); lvl(false); run(100); }
-  void shot(const char* n) { app.tick(t + 1); Shot s; s.name = n; s.fb = app.frame(); shots.push_back(s); }
-  void api(const char* path, const char* body) { char b[8192]; StrBuf sb(b, sizeof b); ApiCtx c; c.token = app.sessionToken(); c.devTools = true; app.api("POST", path, body, tbStrlen(body), c, sb, t); }
+  ~Rig() { delete app; }
+  void run(ms_t ms, ms_t step = 20) { ms_t end = t + ms; while (t < end) { t += step; app->motionSample(0, 1000, 0, t); app->tick(t); } }
+  void tap(int x, int y) { app->touchSample(true, x, y, t); run(60); app->touchSample(false, x, y, t); run(400); }
+  void button(int id) { int x, y; if (app->buttonPos(id, x, y)) tap(x, y); }
 };
 
 int main(int argc, char** argv) {
-  const char* outPath = argc > 1 ? argv[1] : "docs/telas.pbm";
-  { Sim s(Model::Full); s.run(500); s.shot("abertura 1"); s.run(800); s.shot("abertura 2"); s.run(900); s.shot("abertura 3"); s.run(500); s.shot("saudacao"); }
-  { Sim s(Model::Full); s.run(3000); s.shot("rosto"); s.lvl(true); s.run(1300); s.shot("segurando: carinho"); s.run(2000); s.shot("segurando: amor"); s.lvl(false); s.run(300); s.shot("amor");
-    s.run(4000); s.lvl(true); s.run(6000); s.shot("segurando 6s: config"); s.lvl(false); s.run(200); s.shot("confirmar config"); s.run(7000);
-    s.lvl(true); s.run(70); s.lvl(false); s.run(80); s.lvl(true); s.run(70); s.lvl(false); s.run(400); s.shot("menu");
-    s.tap(); s.tap(); s.hold(1200); s.tap(); s.run(65000); s.shot("pomodoro"); }
-  { Sim s(Model::Full); s.run(3000); s.api("/api/action", "{\"action\":\"timer.start\",\"slot\":0,\"seconds\":3}"); s.run(3100); s.shot("alerta timer"); }
-  { Sim s(Model::Lite, false); s.run(3000); s.shot("primeiro uso"); s.tap(); s.shot("primeiro uso 2"); }
-  { Sim s(Model::Full); s.run(3000); s.app.startGame(GameId::Jump, s.t); s.shot("pula intro"); s.tap(); s.run(2400); s.shot("pula jogando"); s.run(4000); s.shot("pula fim"); }
-  { Sim s(Model::Full); s.run(3000); s.app.startGame(GameId::Fish, s.t); s.tap(); s.run(1300); s.shot("hora do bote"); }
-  { Sim s(Model::Full); s.run(3000); s.app.startGame(GameId::Reflex, s.t); s.tap(); s.run(200); s.shot("reflexo espere"); s.run(4500); s.shot("reflexo agora"); s.tap(); s.shot("reflexo resultado"); }
-  { Sim s(Model::Full); s.run(3000); s.app.startGame(GameId::Timing, s.t); s.shot("tempo certo"); s.tap(); s.run(1200); s.shot("contagem"); s.run(3000); s.shot("cronometrando"); s.tap(); s.shot("resultado"); }
-  { Sim s(Model::Full); s.run(3000); s.api("/api/time", "{\"epoch\":1791936000}"); s.app.gotoScreen(Screen::Clock, s.t); s.run(100); s.shot("relogio"); s.app.gotoScreen(Screen::GamesMenu, s.t); s.run(100); s.shot("menu jogos"); }
-
-  int cols = 4, rows = ((int)shots.size() + cols - 1) / cols;
-  int W = cols * 132, Hh = rows * 68;
-  FILE* f = fopen(outPath, "w");
-  if (!f) return 1;
-  fprintf(f, "P1\n%d %d\n", W, Hh);
-  for (int y = 0; y < Hh; y++) {
-    for (int x = 0; x < W; x++) {
-      int c = x / 132, r = y / 68, i = r * cols + c, px = x % 132 - 2, py = y % 68 - 2;
-      int v = 0;  // PBM: 1 = preto; aqui 1 = pixel aceso (o script inverte)
-      if (i < (int)shots.size() && px >= 0 && px < 128 && py >= 0 && py < 64) v = shots[i].fb.get(px, py);
-      fputc(v ? '1' : '0', f);
-    }
-    fputc('\n', f);
+  if (argc > 1) outDir = argv[1];
+  {
+    Rig r(false);
+    r.run(400); save(*r.app, "abertura_mar");
+    r.run(900); save(*r.app, "abertura_nome");
+    r.run(1100); save(*r.app, "abertura_olhos");
+    r.run(1500); save(*r.app, "primeiro_uso_qr");
   }
-  fclose(f);
-  for (size_t i = 0; i < shots.size(); i++) printf("%2zu %s\n", i, shots[i].name.c_str());
+  Rig r;
+  r.run(3200);
+  r.run(2600); save(*r.app, "rosto");
+  r.app->face().setExpression(Expr::Love, r.t, true); r.run(500); save(*r.app, "rosto_amor");
+  r.app->gotoScreen(Screen::Clock, r.t); r.run(600); save(*r.app, "relogio_digital");
+  r.app->gotoScreen(Screen::Today, r.t); r.run(600);
+  r.app->pomodoro().start(r.t); r.app->timer(0).start(r.t); r.run(60000);
+  {
+    const char* body = "{\"current\":{\"temperature_2m\":24.6,\"relative_humidity_2m\":61,\"weather_code\":2,\"is_day\":1},"
+                       "\"daily\":{\"weather_code\":[2,61,3],\"temperature_2m_max\":[28.1,24.0,26.4],\"temperature_2m_min\":[18.2,17.9,16.0]}}";
+    r.app->weatherResult(body, strlen(body), 200, r.t);
+  }
+  r.app->gotoScreen(Screen::Today, r.t); r.run(600); save(*r.app, "hoje");
+  r.app->gotoScreen(Screen::Launcher, r.t); r.run(800); save(*r.app, "apps");
+  r.app->gotoScreen(Screen::Quick, r.t); r.run(600); save(*r.app, "ajustes_rapidos");
+  r.app->gotoScreen(Screen::Pomodoro, r.t); r.run(600); save(*r.app, "pomodoro");
+  r.app->gotoScreen(Screen::Timers, r.t); r.run(600); save(*r.app, "timers");
+  r.app->gotoScreen(Screen::Stopwatch, r.t); r.app->stopwatch().start(r.t - 83456); r.run(600); save(*r.app, "cronometro");
+  r.app->gotoScreen(Screen::Alarms, r.t); r.run(600); save(*r.app, "alarmes");
+  r.button(25); r.run(600); save(*r.app, "alarme_editar");
+  r.app->gotoScreen(Screen::GamesMenu, r.t); r.run(600); save(*r.app, "jogos");
+  r.app->startGame(GameId::Jump, r.t); r.run(400); save(*r.app, "jogo_pula_intro");
+  r.tap(233, 233); r.run(2600); save(*r.app, "jogo_pula");
+  r.app->startGame(GameId::Fish, r.t); r.tap(233, 233); r.run(900); save(*r.app, "jogo_bote");
+  r.app->startGame(GameId::Timing, r.t); r.run(300); save(*r.app, "jogo_tempo_certo");
+  r.app->startGame(GameId::Dive, r.t); r.tap(233, 233); r.run(4000); save(*r.app, "jogo_mergulho");
+  r.app->gotoScreen(Screen::Expressions, r.t); r.run(600); save(*r.app, "expressoes");
+  r.app->gotoScreen(Screen::Breath, r.t); r.run(300); r.tap(233, 233); r.run(2500); save(*r.app, "respiracao");
+  r.app->gotoScreen(Screen::Level, r.t); r.run(600); save(*r.app, "nivel");
+  r.app->gotoScreen(Screen::Dice, r.t); r.run(300); r.tap(233, 233); r.run(1200); save(*r.app, "sorteio");
+  r.app->gotoScreen(Screen::Weather, r.t); r.run(600); save(*r.app, "clima");
+  r.app->gotoScreen(Screen::Stats, r.t); r.run(600); save(*r.app, "meu_tuba");
+  r.app->gotoScreen(Screen::Settings, r.t); r.run(600); save(*r.app, "ajustes");
+  r.app->openConfig(r.t); r.run(600); save(*r.app, "config_qr");
+  r.app->gotoScreen(Screen::Info, r.t); r.run(600); save(*r.app, "informacoes");
+  r.app->gotoScreen(Screen::Face, r.t); r.run(25 * 60000, 200); save(*r.app, "alerta_pomodoro");
   return 0;
 }

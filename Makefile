@@ -1,6 +1,6 @@
 # TubaBot — atalhos (macOS e Linux). Veja README_MAC.md.
 CXX ?= c++
-CXXFLAGS = -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter -Icore
+CXXFLAGS = -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter -ffp-contract=off -Icore
 CORE = $(wildcard core/*.cpp)
 BUILD = build
 

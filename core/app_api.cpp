@@ -1,6 +1,7 @@
 // API local (JSON), idêntica no ESP32 e no simulador.
 // Rotas documentadas em docs/API.md.
 #include "app.h"
+#include "app_ids.h"
 
 namespace tb {
 
@@ -28,7 +29,7 @@ void App::writePrefs(JsonOut& j) {
   j.kbool("setupDone", set_.setupDone);
   j.kstr("nickname", set_.nickname);
   j.kstr("personality", set_.personality ? "brincalhao" : "tranquilo");
-  j.kint("contrast", set_.contrast);
+  j.kint("brightness", set_.brightness);
   j.kbool("rotate180", set_.rotate180);
   j.kstr("favoriteExpr", exprKey((Expr)set_.favoriteExpr));
   j.kint("animLevel", set_.animLevel);
@@ -52,6 +53,19 @@ void App::writePrefs(JsonOut& j) {
   j.kint("apTimeoutMin", set_.apTimeoutMin);
   j.kbool("weatherEnabled", set_.weatherEnabled);
   j.kbool("ntpEnabled", set_.ntpEnabled);
+  j.kint("volume", set_.volume);
+  j.kstr("eyeColor", EYE_COLORS[set_.eyeColor].key);
+  j.kbool("eyeGlow", set_.eyeGlow);
+  j.kint("watchFace", set_.watchFace);
+  j.kbool("imuReactions", set_.imuReactions); j.kbool("micReactions", set_.micReactions); j.kbool("tiltLook", set_.tiltLook);
+  j.kbool("faceDownSnooze", set_.faceDownSnooze); j.kbool("nightDim", set_.nightDim); j.kbool("wakeOnPickup", set_.wakeOnPickup);
+  j.beginArr("alarms");
+  for (int i = 0; i < ALARM_COUNT; i++)
+    j.beginObj().kstr("label", set_.alarms[i].label).kint("hour", set_.alarms[i].hour).kint("minute", set_.alarms[i].minute)
+        .kint("days", set_.alarms[i].days).kbool("enabled", set_.alarms[i].enabled).endObj();
+  j.endArr();
+  j.beginObj("weather").kstr("city", set_.weatherCity == 255 ? "custom" : CITY_TABLE[set_.weatherCity].key)
+      .kint("latE4", set_.weatherLatE4).kint("lonE4", set_.weatherLonE4).endObj();
   j.endObj();
 }
 
@@ -62,6 +76,7 @@ void App::writeProgress(JsonOut& j) {
   j.kint("jumpBest", P.jumpBest).kint("fishBest", P.fishBest).kint("reflexBestMs", P.reflexBestMs);
   j.kint("timingBestPct100", P.timingBestPct100).kint("timingBestErrMs", P.timingBestErrMs).kint("timingBestTargetCs", P.timingBestTargetCs);
   j.kint("gamesPlayed", P.gamesPlayed).kint("mood", P.mood).kint("bond", P.bond);
+  j.kint("diveBest", P.diveBest).kint("danceSeconds", P.danceSeconds).kint("breathSessions", P.breathSessions).kint("shakes", P.shakes).kint("boops", P.boops);
   j.kbool("testProfile", testMode_);
   j.endObj();
 }
@@ -89,7 +104,7 @@ int App::applyPrefsJson(const JsonVal& v, JsonOut& err, int& errCount, ms_t now,
       bool ctrl = false; for (size_t i = 0; i < l; i++) if ((uint8_t)a[i] < 0x20) ctrl = true;
       if (c < 0 || ctrl) fail("nickname", "caracteres inválidos");
       else if (c > NICK_MAX_CHARS) fail("nickname", "máximo de 12 caracteres");
-      else if (Framebuffer::textWidth(a) > 124) fail("nickname", "não cabe no visor");
+      else if (Canvas::textWidth(a, FONT_L) > 340) fail("nickname", "não cabe no visor");
       else tbStrlcpy(s.nickname, a, sizeof s.nickname);
     }
   }
@@ -100,7 +115,8 @@ int App::applyPrefsJson(const JsonVal& v, JsonOut& err, int& errCount, ms_t now,
     else if (x.asString(p, sizeof p) && tbStreq(p, "brincalhao")) s.personality = 1;
     else fail("personality", "use tranquilo ou brincalhao");
   }
-  if (getInt(v, "contrast", 1, 255, n)) s.contrast = (uint8_t)n;
+  if (getInt(v, "brightness", 1, 255, n)) s.brightness = (uint8_t)n;
+  if (getInt(v, "contrast", 1, 255, n)) s.brightness = (uint8_t)n;  // backup da v1
   getBool(v, "rotate180", s.rotate180);
   x = v.get("favoriteExpr");
   if (x.ok()) {
@@ -164,16 +180,55 @@ int App::applyPrefsJson(const JsonVal& v, JsonOut& err, int& errCount, ms_t now,
   getBool(v, "weatherEnabled", s.weatherEnabled);
   getBool(v, "ntpEnabled", s.ntpEnabled);
   getBool(v, "setupDone", s.setupDone);
+  if (getInt(v, "volume", 0, 100, n)) s.volume = (uint8_t)n;
+  x = v.get("eyeColor");
+  if (x.ok()) { char k[16]; int idx = x.asString(k, sizeof k) ? eyeColorFromKey(k) : -1; if (idx < 0) fail("eyeColor", "cor desconhecida"); else s.eyeColor = (uint8_t)idx; }
+  getBool(v, "eyeGlow", s.eyeGlow);
+  if (getInt(v, "watchFace", 0, WATCHFACE_COUNT - 1, n)) s.watchFace = (uint8_t)n;
+  getBool(v, "imuReactions", s.imuReactions); getBool(v, "micReactions", s.micReactions); getBool(v, "tiltLook", s.tiltLook);
+  getBool(v, "faceDownSnooze", s.faceDownSnooze); getBool(v, "nightDim", s.nightDim); getBool(v, "wakeOnPickup", s.wakeOnPickup);
+  JsonVal al = v.get("alarms");
+  if (al.ok()) {
+    if (!al.isArray() || al.arrayLen() > ALARM_COUNT) fail("alarms", "até 3 alarmes");
+    else for (int i = 0; i < al.arrayLen(); i++) {
+      JsonVal r = al.at(i);
+      JsonVal lb = r.get("label");
+      if (lb.ok()) {
+        char tmp[ALARM_LABEL_BYTES];
+        int c = lb.asString(tmp, sizeof tmp) ? utf8Count(tmp, tbStrlen(tmp)) : -1;
+        if (c < 1 || c > 12) fail("alarms.label", "rótulo de 1 a 12 caracteres");
+        else tbStrlcpy(s.alarms[i].label, tmp, sizeof s.alarms[i].label);
+      }
+      if (getInt(r, "hour", 0, 23, n)) s.alarms[i].hour = (uint8_t)n;
+      if (getInt(r, "minute", 0, 59, n)) s.alarms[i].minute = (uint8_t)n;
+      if (getInt(r, "days", 0, 127, n)) s.alarms[i].days = (uint8_t)n;
+      getBool(r, "enabled", s.alarms[i].enabled);
+    }
+  }
+  JsonVal w = v.get("weather");
+  if (w.isObject()) {
+    JsonVal c = w.get("city");
+    if (c.ok()) {
+      char k[24]; int idx = -1;
+      if (c.asString(k, sizeof k)) idx = tbStreq(k, "custom") ? 255 : cityIndexFromKey(k);
+      if (idx < 0) fail("weather.city", "cidade desconhecida"); else s.weatherCity = (uint8_t)idx;
+    }
+    if (getInt(w, "latE4", -900000, 900000, n)) s.weatherLatE4 = (int32_t)n;
+    if (getInt(w, "lonE4", -1800000, 1800000, n)) s.weatherLonE4 = (int32_t)n;
+  }
   if (errCount || dryRun) return errCount;
   bool reminderChanged = false;
   for (int i = 0; i < REMINDER_COUNT; i++)
     if (s.reminders[i].intervalMin != set_.reminders[i].intervalMin || s.reminders[i].enabled != set_.reminders[i].enabled) reminderChanged = true;
   bool favChanged = s.favoriteExpr != set_.favoriteExpr;
+  bool weatherChanged = s.weatherCity != set_.weatherCity || s.weatherLatE4 != set_.weatherLatE4 || s.weatherLonE4 != set_.weatherLonE4 ||
+                        s.weatherEnabled != set_.weatherEnabled;
   set_ = s;
   sanitizeSettings(set_);
   applyPrefs(now);  // sem reiniciar; som/vibração desligados cortam a saída em andamento
   if (reminderChanged) for (int i = 0; i < REMINDER_COUNT; i++) reminderDue_[i] = now + (ms_t)set_.reminders[i].intervalMin * 60000;
   if (favChanged) { baseExpr_ = (Expr)set_.favoriteExpr; if (screen_ == Screen::Face) face_.setExpression(baseExpr_, now); }
+  if (weatherChanged) { weather_.valid = false; weatherTryAt_ = 0; weatherFailed_ = false; }
   markSettings(now);
   forceFrame_ = true;
   return 0;
@@ -181,8 +236,8 @@ int App::applyPrefsJson(const JsonVal& v, JsonOut& err, int& errCount, ms_t now,
 
 int App::apiStatus(JsonOut& j, ms_t now) {
   j.kbool("ok", true);
-  j.kstr("model", model_ == Model::Lite ? "lite" : "full");
-  j.kstr("modelName", model_ == Model::Lite ? "TubaBot Lite" : "TubaBot");
+  j.kstr("model", "v2");
+  j.kstr("modelName", "TubaBot v2");
   j.kstr("version", TB_VERSION);
   j.kstr("nickname", set_.nickname);
   j.kstr("personality", set_.personality ? "brincalhao" : "tranquilo");
@@ -207,9 +262,12 @@ int App::apiStatus(JsonOut& j, ms_t now) {
       .kint("apSecondsLeft", ns.apSecondsLeft).kbool("homeConfigured", ns.staConfigured)
       .kstr("home", ns.sta == StaState::Connected ? "connected" : ns.sta == StaState::Connecting ? "connecting" : ns.sta == StaState::Failed ? "failed" : "off")
       .kstr("homeSsid", ns.staSsid).kstr("homeIp", ns.staIp).endObj();
-  j.beginObj("outputs").kbool("soundAllowed", AlertPolicy::soundAllowed(model_, out_.prefs()))
-      .kbool("vibrationAllowed", AlertPolicy::vibeAllowed(model_, out_.prefs()))
-      .kbool("buzzer", out_.buzzer()).kbool("motor", out_.motor()).kstr("pattern", patternName(out_.current())).endObj();
+  j.beginObj("caps").kbool("speaker", caps_.speaker).kbool("motor", caps_.motor).kbool("imu", caps_.imu).kbool("mic", caps_.mic)
+      .kbool("battery", caps_.battery).kbool("rtc", caps_.rtc).endObj();
+  j.beginObj("outputs").kbool("soundAllowed", AlertPolicy::soundAllowed(caps_, out_.prefs()))
+      .kbool("vibrationAllowed", AlertPolicy::vibeAllowed(caps_, out_.prefs()))
+      .kbool("sound", out_.soundActive(now)).kbool("motor", out_.motor()).kstr("pattern", patternName(out_.current()))
+      .kint("volume", set_.volume).kint("brightness", appliedBright_).endObj();
   j.beginObj("pomodoro").kstr("state", runStateName(pomo_.state()))
       .kstr("phase", pomo_.phase() == PomoPhase::Focus ? "focus" : pomo_.phase() == PomoPhase::ShortBreak ? "short" : "long")
       .kint("remainingMs", pomo_.remainingMs(now)).kint("focusDone", pomo_.focusDone()).endObj();
@@ -220,6 +278,19 @@ int App::apiStatus(JsonOut& j, ms_t now) {
   j.beginObj("stopwatch").kstr("state", runStateName(sw_.state())).kint("elapsedMs", (int64_t)sw_.elapsedMs(now)).kbool("limit", sw_.limitHit()).endObj();
   j.kint("alerts", alertN_);
   j.beginObj("input").kbool("pressed", input_.pressed()).kbool("stuck", input_.stuck()).kint("rawEdges", input_.rawEdges()).endObj();
+  static const char* const POSE[] = {"upright", "face_down", "on_back", "upside_down", "tilted"};
+  j.beginObj("motion").kbool("active", motion_.active()).kstr("pose", POSE[(int)motion_.pose()])
+      .kint("tiltX", motion_.tiltX()).kint("tiltY", motion_.tiltY()).endObj();
+  j.beginObj("sound").kbool("active", sound_.active()).kint("level", sound_.level()).kint("baseline", sound_.baseline())
+      .kbool("music", sound_.music()).endObj();
+  j.beginObj("power").kbool("known", power_.known).kbool("battery", power_.battery).kint("percent", power_.percent)
+      .kbool("charging", power_.charging).kbool("usb", power_.usb).kint("mv", power_.mv).endObj();
+  j.beginObj("weather").kbool("enabled", set_.weatherEnabled).kbool("valid", weather_.valid);
+  if (weather_.valid) j.kint("tempC10", weather_.tempC10).kint("code", weather_.code).kstr("text", weatherText(weather_.code))
+      .kint("hiC10", weather_.hiC10).kint("loC10", weather_.loC10).kint("humidity", weather_.humidity).kint("ageS", (int64_t)((now - weather_.updatedAt) / 1000));
+  j.endObj();
+  int mins = 0, na = nextAlarmIndex(now, &mins);
+  j.beginObj("nextAlarm").kint("index", na); if (na >= 0) j.kint("inMinutes", mins); j.endObj();
   j.beginObj("storage").kbool("recovered", recovered_).kint("writes", writes_).endObj();
   j.beginObj("event").kint("seq", eventSeq_).kstr("last", lastEvent_).endObj();
   return 200;
@@ -266,14 +337,21 @@ int App::apiAction(const JsonVal& v, JsonOut& j, ms_t now, bool devTools) {
     Pattern p = patternFromName(k);
     if (p == Pattern::None) return -2;
     out_.play(p, now);
-    j.kbool("soundAllowed", AlertPolicy::soundAllowed(model_, out_.prefs()));
-    j.kbool("vibrationAllowed", AlertPolicy::vibeAllowed(model_, out_.prefs()));
+    j.kbool("soundAllowed", AlertPolicy::soundAllowed(caps_, out_.prefs()));
+    j.kbool("vibrationAllowed", AlertPolicy::vibeAllowed(caps_, out_.prefs()));
   }
   else if (tbStreq(a, "diag.oled")) { diagUntil_ = now + 3000; event("teste do visor"); }
   else if (tbStreq(a, "config.open")) openConfig(now);
   else if (tbStreq(a, "ap.close")) { plat_.apClose(); }
   else if (tbStreq(a, "setup.offline")) { set_.setupDone = 1; markSettings(now); if (screen_ == Screen::FirstUse) gotoScreen(Screen::Face, now); }
   else if (tbStreq(a, "screen.wake")) { if (screen_ == Screen::ScreenOff) wake(now); else noteInteraction(now); }
+  else if (tbStreq(a, "screen.sleep")) sleepScreen(now);
+  else if (tbStreq(a, "alarm.toggle")) {
+    if (!v.get("slot").asInt(n) || n < 0 || n >= ALARM_COUNT) return -2;
+    set_.alarms[n].enabled = !set_.alarms[n].enabled; markSettings(now);
+  }
+  else if (tbStreq(a, "alarm.snooze")) { if (alertN_ && alerts_[0].type == AlertType::Alarm) ackAlert(now, true); }
+  else if (tbStreq(a, "weather.refresh")) { weatherTryAt_ = 0; weatherFailed_ = false; }
   else if (tbStreq(a, "reboot")) { flush(now, true); plat_.requestReboot(); }
   else if (devTools && devBuild_ && tbStreq(a, "dev.unlockAll")) {
     // desbloqueio de TESTE: perfil separado, nunca gravado
@@ -310,19 +388,31 @@ int App::api(const char* method, const char* path, const char* body, size_t body
   }
   if (tbStreq(path, "/api/status") && isGet) { JsonOut j(out); j.beginObj(); int c = apiStatus(j, now); j.endObj(); return c; }
   if (tbStreq(path, "/api/frame") && isGet) {
-    JsonOut j(out); j.beginObj().kint("w", FB_W).kint("h", FB_H).kstr("layout", "ssd1306-pages");
-    out.put(",\"data\":\""); b64(out, prev_.buf, FB_BYTES); out.put('"'); j.endObj();
+    // miniatura 1:4 (117×117, RGB565 little-endian) para o "espelho" do portal
+    static const int kStep = 4, kN = (SCR_W + kStep - 1) / kStep;
+    JsonOut j(out); j.beginObj().kint("w", kN).kint("h", kN).kstr("layout", "rgb565le").kint("step", kStep);
+    out.put(",\"data\":\"");
+    uint8_t row[kN * 2];
+    const uint16_t* px = canvas_.pixels();
+    for (int y = 0; y < kN && !out.overflow; y++) {
+      for (int x = 0; x < kN; x++) { uint16_t v = px ? px[(y * kStep) * SCR_W + x * kStep] : 0; row[x * 2] = (uint8_t)v; row[x * 2 + 1] = (uint8_t)(v >> 8); }
+      b64(out, row, sizeof row);
+    }
+    out.put('"'); j.endObj();
+    if (out.overflow) { out.len = 0; out.buf[0] = 0; out.overflow = false; return errorJson(out, 507, "buffer pequeno"); }
     return 200;
   }
   if (tbStreq(path, "/api/prefs") && isGet) { JsonOut j(out); j.beginObj().kbool("ok", true); writePrefs(j); j.endObj(); return 200; }
   if (tbStreq(path, "/api/records") && isGet) { JsonOut j(out); j.beginObj().kbool("ok", true); writeProgress(j); j.endObj(); return 200; }
   if (tbStreq(path, "/api/collection") && isGet) {
     static const char* const CRIT[UNL_COUNT] = {"Primeiro carinho concluído", "Primeiro Pomodoro completo", "Passar 10 obstáculos em uma partida de Pula, Tuba!",
-                                               "Capturar 5 peixes em uma partida de Hora do Bote", "Concluir 5 rodadas válidas de Tuba Reflexo", "Fazer 98% ou mais em No Tempo Certo"};
+                                               "Capturar 5 peixes em uma partida de Hora do Bote", "Concluir 5 rodadas válidas de Tuba Reflexo", "Fazer 98% ou mais em No Tempo Certo",
+                                               "Dançar 30 segundos ao som de música", "Concluir 3 sessões de respiração", "Pegar 20 peixes em uma partida de Mergulho",
+                                               "Conquistar todas as outras expressões"};
     const Progress& P = testMode_ ? progTest_ : prog_;
     JsonOut j(out); j.beginObj().kbool("ok", true).kbool("testProfile", testMode_).beginArr("base");
-    static const Expr base[] = {Expr::Happy, Expr::Neutral, Expr::Surprised, Expr::Love, Expr::Sad, Expr::Sleepy, Expr::Angry, Expr::WinkL, Expr::WinkR, Expr::Pet, Expr::Dead};
-    for (Expr e : base) j.beginObj().kstr("key", exprKey(e)).kstr("name", exprName(e)).endObj();
+    Expr base[40]; int nb = availableExprs(base, 40); if (nb > 11) nb = 11;
+    for (int bi = 0; bi < nb; bi++) { Expr e = base[bi]; j.beginObj().kstr("key", exprKey(e)).kstr("name", exprName(e)).endObj(); }
     j.endArr().beginArr("unlockables");
     for (int i = 0; i < UNL_COUNT; i++) {
       j.beginObj().kstr("key", exprKey(exprForUnlock(i))).kstr("name", exprName(exprForUnlock(i))).kstr("criterion", CRIT[i])
@@ -331,7 +421,10 @@ int App::api(const char* method, const char* path, const char* body, size_t body
       switch (i) {
         case UNL_TIMIDO: cur = P.pets; break; case UNL_FOCADO: cur = P.pomodorosDone; break;
         case UNL_VITORIOSO: cur = P.jumpBest; goal = 10; break; case UNL_SATISFEITO: cur = P.fishBest; goal = 5; break;
-        case UNL_ESPANTADO: cur = P.reflexValid; goal = 5; break; default: cur = P.timingBestPct100; goal = 9800;
+        case UNL_ESPANTADO: cur = P.reflexValid; goal = 5; break; case UNL_PRECISAO: cur = P.timingBestPct100; goal = 9800; break;
+        case UNL_DANCANTE: cur = P.danceSeconds; goal = 30; break; case UNL_ZEN: cur = P.breathSessions; goal = 3; break;
+        case UNL_MERGULHADOR: cur = P.diveBest; goal = 20; break;
+        default: { goal = UNL_COUNT - 1; for (int k = 0; k < UNL_COUNT - 1; k++) cur += (P.unlocked >> k) & 1u; }
       }
       j.kint("current", tbMin(cur, goal)).kint("goal", goal).endObj();
     }
@@ -348,6 +441,17 @@ int App::api(const char* method, const char* path, const char* body, size_t body
     JsonOut j(out); j.beginObj().kbool("ok", true).kbool("configured", ns.staConfigured).kstr("ssid", ns.staSsid)
         .kstr("state", ns.sta == StaState::Connected ? "connected" : ns.sta == StaState::Connecting ? "connecting" : ns.sta == StaState::Failed ? "failed" : "off")
         .kstr("ip", ns.staIp).endObj();  // a senha NUNCA é devolvida
+    return 200;
+  }
+  if (tbStreq(path, "/api/options") && isGet) {
+    JsonOut j(out); j.beginObj().kbool("ok", true).beginArr("cities");
+    for (int i = 0; i < CITY_COUNT; i++) j.beginObj().kstr("key", CITY_TABLE[i].key).kstr("name", CITY_TABLE[i].name).endObj();
+    j.endArr().beginArr("eyeColors");
+    for (int i = 0; i < EYE_COLOR_COUNT; i++) {
+      char hx[8]; StrBuf h(hx, sizeof hx); h.put('#').hex(EYE_COLORS[i].rgb, 6);
+      j.beginObj().kstr("key", EYE_COLORS[i].key).kstr("name", EYE_COLORS[i].name).kstr("hex", hx).endObj();
+    }
+    j.endArr().endObj();
     return 200;
   }
   if (tbStreq(path, "/api/tz") && isGet) {
@@ -394,7 +498,7 @@ int App::api(const char* method, const char* path, const char* body, size_t body
     return 200;
   }
   if (tbStreq(path, "/api/backup")) {
-    JsonOut j(out); j.beginObj().kbool("ok", true).kstr("format", "tubabot-backup").kint("version", 1).kstr("fw", TB_VERSION);
+    JsonOut j(out); j.beginObj().kbool("ok", true).kstr("format", "tubabot-backup").kint("version", 2).kstr("fw", TB_VERSION);
     writePrefs(j); writeProgress(j); j.endObj();
     return 200;
   }
@@ -416,6 +520,9 @@ int App::api(const char* method, const char* path, const char* body, size_t body
       if (pg.get("pomodorosDone").asInt(n) && n > (int64_t)prog_.pomodorosDone && n < 1000000) prog_.pomodorosDone = (uint32_t)n;
       if (pg.get("jumpBest").asInt(n) && n > prog_.jumpBest && n < 65536) prog_.jumpBest = (uint16_t)n;
       if (pg.get("fishBest").asInt(n) && n > prog_.fishBest && n < 65536) prog_.fishBest = (uint16_t)n;
+      if (pg.get("diveBest").asInt(n) && n > prog_.diveBest && n < 65536) prog_.diveBest = (uint16_t)n;
+      if (pg.get("breathSessions").asInt(n) && n > prog_.breathSessions && n < 65536) prog_.breathSessions = (uint16_t)n;
+      if (pg.get("danceSeconds").asInt(n) && n > prog_.danceSeconds && n < 65536) prog_.danceSeconds = (uint16_t)n;
       markProgress(now);
     }
     JsonOut j(out); j.beginObj().kbool("ok", true).endObj();

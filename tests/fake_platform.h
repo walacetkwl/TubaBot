@@ -5,15 +5,20 @@
 #include <cstdio>
 
 struct FakePlatform : public tb::Platform {
-  uint8_t store[4][600];
+  uint8_t store[4][tb::BLOB_MAX];
   size_t storeLen[4] = {0, 0, 0, 0};
   bool apActive = false;
   int apOpens = 0, apCloses = 0, reboots = 0, saves = 0;
-  bool staConfigured = false;
+  bool staConfigured = false, staConnected = false;
   char staSsid[33] = {0};
   char staPassStored[65] = {0};
   bool failSaves = false;
   bool quiet = true;
+  uint8_t brightness = 255;
+  bool rotate = false;
+  int displayCalls = 0;
+  int64_t rtc = 0;
+  int rtcWrites = 0;
 
   bool storageLoad(tb::BlobKind k, uint8_t* buf, size_t cap, size_t* len) override {
     int i = (int)k;
@@ -30,18 +35,20 @@ struct FakePlatform : public tb::Platform {
   void netStatus(tb::NetStatus& s) override {
     s = tb::NetStatus();
     s.apActive = apActive;
-    strcpy(s.apSsid, "TubaBot-AB12"); strcpy(s.apPass, "tuba-7f3k-29qd"); strcpy(s.apIp, "192.168.4.1"); strcpy(s.mdns, "tubabot-ab12.local");
+    strcpy(s.apSsid, "TubaBot-AB12"); strcpy(s.apPass, "tuba-7f3k"); strcpy(s.apIp, "192.168.4.1"); strcpy(s.mdns, "tubabot-ab12.local");
     s.staConfigured = staConfigured; strcpy(s.staSsid, staSsid);
-    s.sta = staConfigured ? tb::StaState::Failed : tb::StaState::Off;
+    s.sta = staConfigured ? (staConnected ? tb::StaState::Connected : tb::StaState::Failed) : tb::StaState::Off;
+    if (staConnected) strcpy(s.staIp, "192.168.0.42");
   }
   bool wifiSet(const char* ssid, const char* pass) override {
     staConfigured = true; strncpy(staSsid, ssid, 32); strncpy(staPassStored, pass, 64); return true;
   }
-  void wifiForget() override { staConfigured = false; staSsid[0] = 0; staPassStored[0] = 0; }
+  void wifiForget() override { staConfigured = false; staConnected = false; staSsid[0] = 0; staPassStored[0] = 0; }
   void sysInfo(tb::SysInfo& s) override { s = tb::SysInfo(); s.simulated = true; }
   void requestReboot() override { reboots++; }
-  void applyDisplay(uint8_t, bool) override {}
+  void applyDisplay(uint8_t b, bool r) override { brightness = b; rotate = r; displayCalls++; }
   void setTimezone(const char*) override {}
   bool busy() override { return false; }
   void log(const char* m) override { if (!quiet) printf("  [log] %s\n", m); }
+  void rtcWrite(int64_t e) override { rtc = e; rtcWrites++; }
 };

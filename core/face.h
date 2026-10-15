@@ -1,7 +1,9 @@
-// Rosto do TubaBot: expressões paramétricas, transições suaves, piscar e
-// olhar natural. Branco sobre preto, 128×64.
+// Rosto do TubaBot v2: olhos luminosos coloridos em tela redonda 466×466.
+// Expressões paramétricas (todas as medidas no espaço de desenho 466×466),
+// transições suaves, piscar, olhar natural, respiração, olhar que segue o
+// dedo/inclinação, dança no ritmo e deslocamento anti-marcação do AMOLED.
 #pragma once
-#include "framebuffer.h"
+#include "gfx.h"
 
 namespace tb {
 
@@ -10,52 +12,73 @@ enum class Expr : uint8_t {
   Focus, Rest, Hit, NearMiss, Celebrate, Waiting,
   // desbloqueáveis (mesma ordem de UnlockId)
   Shy, Focused, Victorious, Satisfied, Amazed, Precision,
+  Groovy, Zen, Diver, Radiant,
+  // reações da v2 (não aparecem na coleção)
+  Dizzy, Startled, Squint, Charging, Tired, Curious,
   Count
 };
 const char* exprName(Expr e);        // nome em pt-BR para portal/telas
-const char* exprKey(Expr e);         // chave estável para API
+const char* exprKey(Expr e);         // chave estável para API/backup
 Expr exprFromKey(const char* k);
 bool exprIsUnlockable(Expr e, int* unlockId);
 Expr exprForUnlock(int unlockId);
+bool exprIsReaction(Expr e);
 
-enum class EyeKind : uint8_t { Normal, Heart, X, ArcUp, Line, Star, Ring, Crosshair };
-enum class Mouth : uint8_t { None, Smile, BigSmile, Frown, O, Flat, Cat, Small, Wobble };
-enum FaceExtra : uint8_t { FX_NONE = 0, FX_BLUSH = 1, FX_ZZZ = 2, FX_SPARKLE = 4, FX_HEARTS = 8, FX_SWEAT = 16, FX_DOTS = 32 };
+enum class EyeKind : uint8_t { Normal, Heart, X, ArcUp, ArcDown, Line, Star, Ring, Crosshair, Spiral, Squint, Goggle };
+enum class Mouth : uint8_t { None, Smile, BigSmile, Frown, O, Flat, Cat, Small, Wobble, Open };
+enum FaceExtra : uint16_t {
+  FX_NONE = 0, FX_BLUSH = 1, FX_ZZZ = 2, FX_SPARKLE = 4, FX_HEARTS = 8, FX_SWEAT = 16, FX_DOTS = 32,
+  FX_NOTES = 64, FX_STARS = 128, FX_TEAR = 256, FX_ANGER = 512, FX_BOLT = 1024, FX_BUBBLES = 2048, FX_AURA = 4096, FX_RAINBOW = 8192,
+};
 
 struct EyeShape {
-  int8_t w, h;        // tamanho
-  int8_t lidTop;      // pálpebra superior (px cobertos)
-  int8_t lidBottom;   // bochecha (px cobertos por arco inferior)
-  int8_t slope;       // inclinação da pálpebra: + bravo (canto interno baixo), − triste
-  int8_t dx, dy;      // deslocamento do olhar
+  int16_t w, h;        // tamanho (px)
+  int16_t lidTop;      // pálpebra superior: px cobertos
+  int16_t lidBottom;   // bochecha (arco inferior): px cobertos
+  int16_t slope;       // inclinação da pálpebra: + bravo (canto interno baixo), − triste
+  int16_t dx, dy;      // deslocamento
   EyeKind kind;
 };
-struct FaceDef { EyeShape L, R; Mouth mouth; uint8_t extras; };
+struct FaceDef { EyeShape L, R; Mouth mouth; uint16_t extras; };
 const FaceDef& faceDef(Expr e);
+
+struct FaceStyle {
+  Color eye = 0x3EE6FF;     // cor dos olhos (preferência "cor dos olhos")
+  bool glow = true;         // halo luminoso
+  bool mouth = true;        // mostrar boca
+};
 
 struct PersonalityTuning {
   uint16_t blinkMinMs, blinkMaxMs;
   uint16_t lookMinMs, lookMaxMs;
-  uint8_t lookRangeX, lookRangeY;
-  uint8_t doubleBlinkPct;   // chance de piscada dupla
-  uint8_t mischiefPct;      // chance de microreação (piscadinha/surpresa)
+  uint8_t lookRangeX, lookRangeY;   // px
+  uint8_t doubleBlinkPct;
+  uint8_t mischiefPct;
 };
+
+// Transformação do espaço de desenho (centro 233,233) para a tela.
+struct FaceXf { float cx = (float)SCR_CX, cy = (float)SCR_CY, s = 1.f; };
 
 class FaceRenderer {
  public:
-  static const int kLeftX = 40, kRightX = 88, kEyeY = 27;
+  static const int kLeftX = 141, kRightX = 325, kEyeY = 205, kMouthY = 318;
 
   void reset(ms_t now);
   void setExpression(Expr e, ms_t now, bool instant = false);
   Expr expression() const { return target_; }
-  // Animações ociosas; 'animLevel' 0..2 escala a frequência.
+  Expr shown() const { return microActive_ ? micro_ : target_; }
   void update(ms_t now, Rng& rng, const PersonalityTuning& t, uint8_t animLevel);
-  void draw(Framebuffer& fb, ms_t now);
-  // Estado de "carinho" enquanto o sensor está pressionado (olhos relaxados).
+  void draw(Canvas& c, ms_t now, const FaceStyle& st);
   void setPetting(bool on) { petting_ = on; }
+  // Olhar dirigido (dedo, inclinação): −1000..1000 nos dois eixos.
+  void setLookTarget(bool active, int nx, int ny) { lookExt_ = active; extX_ = nx; extY_ = ny; }
+  void bounce(ms_t now) { bounceAt_ = now; }        // "boop": achata e volta
+  void setDance(bool on, int phase1000) { dance_ = on; dancePhase_ = phase1000; }
+  void setDrift(int dx, int dy) { driftX_ = dx; driftY_ = dy; }  // anti-marcação
   bool animating(ms_t now) const;
 
-  static void drawFace(Framebuffer& fb, const FaceDef& f, ms_t now, int lookX = 0, int lookY = 0, int blinkPermille = 0);
+  static void drawFace(Canvas& c, const FaceDef& f, const FaceStyle& st, ms_t now, const FaceXf& xf,
+                       float lookX = 0, float lookY = 0, int blink = 0, float breathe = 0.f);
 
  private:
   Expr from_ = Expr::Happy, target_ = Expr::Happy;
@@ -64,13 +87,19 @@ class FaceRenderer {
   ms_t nextBlink_ = 0, blinkStart_ = 0;
   bool blinking_ = false, secondBlink_ = false;
   ms_t nextLook_ = 0;
-  int lookX_ = 0, lookY_ = 0, lookTX_ = 0, lookTY_ = 0;
-  ms_t lookMoveStart_ = 0;
-  int lookFromX_ = 0, lookFromY_ = 0;
+  float lookX_ = 0, lookY_ = 0;
+  int lookTX_ = 0, lookTY_ = 0;
+  bool lookExt_ = false;
+  int extX_ = 0, extY_ = 0;
   bool petting_ = false;
   ms_t microUntil_ = 0;
   Expr micro_ = Expr::Happy;
   bool microActive_ = false;
+  ms_t bounceAt_ = 0;
+  bool dance_ = false;
+  int dancePhase_ = 0;
+  int driftX_ = 0, driftY_ = 0;
+  ms_t lastUpdate_ = 0;
 };
 
 }  // namespace tb

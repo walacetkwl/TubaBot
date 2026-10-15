@@ -24,12 +24,44 @@ int tzIndexFromIana(const char* iana) {
   return -1;
 }
 
+// Capitais brasileiras para o clima (Open-Meteo, sem chave). 'tz' = índice em TZ_TABLE.
+const CityEntry CITY_TABLE[] = {
+  {"sao_paulo", "São Paulo", -235505, -466333, 0}, {"rio_de_janeiro", "Rio de Janeiro", -229068, -431729, 0},
+  {"belo_horizonte", "Belo Horizonte", -199167, -439345, 0}, {"brasilia", "Brasília", -157939, -478828, 0},
+  {"salvador", "Salvador", -129714, -385014, 8}, {"fortaleza", "Fortaleza", -37319, -385267, 6},
+  {"recife", "Recife", -80476, -348770, 7}, {"porto_alegre", "Porto Alegre", -300346, -512177, 0},
+  {"curitiba", "Curitiba", -254284, -492733, 0}, {"manaus", "Manaus", -31190, -600217, 1},
+  {"belem", "Belém", -14558, -485044, 5}, {"goiania", "Goiânia", -166869, -492648, 0},
+  {"sao_luis", "São Luís", -25307, -443068, 5}, {"maceio", "Maceió", -96658, -357353, 7},
+  {"natal", "Natal", -57945, -352110, 6}, {"teresina", "Teresina", -50892, -428019, 6},
+  {"joao_pessoa", "João Pessoa", -71195, -348450, 7}, {"aracaju", "Aracaju", -109472, -370731, 8},
+  {"campo_grande", "Campo Grande", -204697, -546201, 4}, {"cuiaba", "Cuiabá", -156014, -560979, 4},
+  {"florianopolis", "Florianópolis", -275954, -485480, 0}, {"vitoria", "Vitória", -203155, -403128, 0},
+  {"porto_velho", "Porto Velho", -87612, -639004, 1}, {"rio_branco", "Rio Branco", -99749, -678243, 2},
+  {"macapa", "Macapá", 349, -510694, 5}, {"boa_vista", "Boa Vista", 28235, -606758, 1},
+  {"palmas", "Palmas", -101840, -483336, 0},
+};
+const int CITY_COUNT = sizeof(CITY_TABLE) / sizeof(CITY_TABLE[0]);
+int cityIndexFromKey(const char* key) {
+  for (int i = 0; i < CITY_COUNT; i++) if (tbStreq(CITY_TABLE[i].key, key)) return i;
+  return -1;
+}
+
+const EyeColorEntry EYE_COLORS[EYE_COLOR_COUNT] = {
+  {"ciano", "Ciano", 0x3EE6FF}, {"menta", "Menta", 0x4BF0A6}, {"lilas", "Lilás", 0xB592FF}, {"rosa", "Rosa", 0xFF7AB6},
+  {"ambar", "Âmbar", 0xFFB547}, {"azul", "Azul", 0x4C8DFF}, {"coral", "Coral", 0xFF6B5B}, {"branco", "Branco", 0xEAF2FF},
+};
+int eyeColorFromKey(const char* key) {
+  for (int i = 0; i < EYE_COLOR_COUNT; i++) if (tbStreq(EYE_COLORS[i].key, key)) return i;
+  return -1;
+}
+
 void defaultSettings(Settings& s) {
   tbMemset(&s, 0, sizeof s);
   s.setupDone = 0;
   s.nickname[0] = 0;
   s.personality = (uint8_t)Personality::Tranquilo;
-  s.contrast = 200;
+  s.brightness = 200;
   s.rotate180 = 0;
   s.favoriteExpr = 0;
   s.animLevel = 1;
@@ -52,6 +84,19 @@ void defaultSettings(Settings& s) {
   s.apTimeoutMin = 15;
   s.weatherEnabled = 0;
   s.ntpEnabled = 0;
+  s.volume = 60;
+  s.eyeColor = 0;
+  s.eyeGlow = 1;
+  s.watchFace = 0;
+  s.imuReactions = 1; s.micReactions = 1; s.tiltLook = 1; s.faceDownSnooze = 1; s.nightDim = 1; s.wakeOnPickup = 1;
+  static const char* const AL[ALARM_COUNT] = {"Acordar", "Alarme 2", "Alarme 3"};
+  static const uint8_t AH[ALARM_COUNT] = {7, 13, 18};
+  for (int i = 0; i < ALARM_COUNT; i++) {
+    tbStrlcpy(s.alarms[i].label, AL[i], sizeof s.alarms[i].label);
+    s.alarms[i].hour = AH[i]; s.alarms[i].minute = 0; s.alarms[i].days = 0x3E; s.alarms[i].enabled = 0;  // seg a sex
+  }
+  s.weatherCity = 0;
+  s.weatherLatE4 = CITY_TABLE[0].latE4; s.weatherLonE4 = CITY_TABLE[0].lonE4;
 }
 
 void defaultProgress(Progress& p) {
@@ -70,7 +115,7 @@ void sanitizeSettings(Settings& s) {
   int nc = utf8Count(s.nickname, nl);
   if (nc < 0 || nc > NICK_MAX_CHARS) s.nickname[0] = 0;
   clampField<uint8_t>(s.personality, 0, 1, d.personality);
-  clampField<uint8_t>(s.contrast, 1, 255, d.contrast);
+  clampField<uint8_t>(s.brightness, 1, 255, d.brightness);
   s.rotate180 = s.rotate180 ? 1 : 0;
   clampField<uint8_t>(s.animLevel, 0, 2, d.animLevel);
   if (s.screenOffS != 0) clampField<uint16_t>(s.screenOffS, 30, 3600, d.screenOffS);
@@ -98,6 +143,24 @@ void sanitizeSettings(Settings& s) {
   clampField<uint16_t>(s.apTimeoutMin, 0, 120, d.apTimeoutMin);
   s.weatherEnabled = s.weatherEnabled ? 1 : 0;
   s.ntpEnabled = s.ntpEnabled ? 1 : 0;
+  clampField<uint8_t>(s.volume, 0, 100, d.volume);
+  clampField<uint8_t>(s.eyeColor, 0, EYE_COLOR_COUNT - 1, 0);
+  s.eyeGlow = s.eyeGlow ? 1 : 0;
+  clampField<uint8_t>(s.watchFace, 0, WATCHFACE_COUNT - 1, 0);
+  s.imuReactions = s.imuReactions ? 1 : 0; s.micReactions = s.micReactions ? 1 : 0; s.tiltLook = s.tiltLook ? 1 : 0;
+  s.faceDownSnooze = s.faceDownSnooze ? 1 : 0; s.nightDim = s.nightDim ? 1 : 0; s.wakeOnPickup = s.wakeOnPickup ? 1 : 0;
+  for (int i = 0; i < ALARM_COUNT; i++) {
+    Alarm& a = s.alarms[i];
+    a.label[ALARM_LABEL_BYTES - 1] = 0;
+    if (utf8Count(a.label, tbStrlen(a.label)) < 0) tbStrlcpy(a.label, d.alarms[i].label, sizeof a.label);
+    clampField<uint8_t>(a.hour, 0, 23, d.alarms[i].hour);
+    clampField<uint8_t>(a.minute, 0, 59, 0);
+    a.days &= 0x7F;
+    a.enabled = a.enabled ? 1 : 0;
+  }
+  if (s.weatherCity != 255) clampField<uint8_t>(s.weatherCity, 0, (uint8_t)(CITY_COUNT - 1), 0);
+  clampField<int32_t>(s.weatherLatE4, -900000, 900000, d.weatherLatE4);
+  clampField<int32_t>(s.weatherLonE4, -1800000, 1800000, d.weatherLonE4);
 }
 
 size_t encodeBlob(BlobKind k, uint8_t ver, const void* payload, size_t len, uint8_t* out, size_t cap) {

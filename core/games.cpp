@@ -8,6 +8,7 @@ const char* gameTitle(GameId g) {
     case GameId::Reflex: return "Tuba Reflexo";
     case GameId::Fish: return "Hora do Bote";
     case GameId::Timing: return "No Tempo Certo";
+    case GameId::Dive: return "Mergulho do Tuba";
     default: return "?";
   }
 }
@@ -37,38 +38,7 @@ static const char* const FISH_ROWS[] = {
 };
 const Sprite SPR_FISH = {13, 7, FISH_ROWS};
 
-void drawSprite(Framebuffer& fb, const Sprite& s, int x, int y, bool on) {
-  for (int j = 0; j < s.h; j++)
-    for (int i = 0; i < s.w; i++)
-      if (s.rows[j][i] == '#') fb.set(x + i, y + j, on);
-}
-
-static int32_t floorDiv1000(int32_t v) { return v >= 0 ? v / 1000 : -((-v + 999) / 1000); }
-
-void Game::drawResultFooter(Framebuffer& fb) {
-  fb.hline(0, 54, 128);
-  fb.textCentered(56, "Toque: jogar de novo");
-}
-
-static void drawPausedOverlay(Framebuffer& fb) {
-  fb.fillRect(24, 22, 80, 20, false);
-  fb.rect(24, 22, 80, 20);
-  fb.textCentered(25, "PAUSA");
-  fb.textCentered(33, "toque: seguir");
-}
-
-static void drawIntro(Framebuffer& fb, const char* title, const char* l1, const char* l2, int32_t best, const char* bestLabel) {
-  fb.textCentered(0, title);
-  fb.hline(0, 9, 128);
-  fb.textCentered(14, l1);
-  if (l2) fb.textCentered(24, l2);
-  char b[32]; StrBuf sb(b, sizeof b);
-  sb.put("Recorde: ");
-  if (bestLabel) sb.put(bestLabel); else sb.num(best);
-  fb.textCentered(38, b);
-  fb.hline(0, 54, 128);
-  fb.textCentered(56, "Toque: começar");
-}
+int32_t floorDiv1000(int32_t v) { return v >= 0 ? v / 1000 : -((-v + 999) / 1000); }
 
 // ════════════════════════════════════════════════════════════════════════════
 // 9.1 Pula, Tuba!
@@ -184,36 +154,6 @@ void JumpGame::update(ms_t now) {
   if (phase_ == GamePhase::Result) resultAt_ = now;
 }
 
-void JumpGame::draw(Framebuffer& fb, ms_t now) {
-  (void)now;
-  if (phase_ == GamePhase::Intro) { drawIntro(fb, "PULA, TUBA!", "Toque para pular", "Segure: sair", best, nullptr); drawSprite(fb, SPR_SHARK, 4, 40); return; }
-  // chão com textura que rola
-  fb.hline(0, kGroundY, 128);
-  int off = (scroll_ / 1000) % 12;
-  for (int x = -off; x < 128; x += 12) { fb.set(x + 3, kGroundY + 2); fb.set(x + 8, kGroundY + 4); }
-  for (const auto& o : obs_) {
-    if (!o.active) continue;
-    int ox = floorDiv1000(o.x);
-    fb.fillRect(ox, kGroundY - o.h, o.w, o.h);
-    if (o.w >= 10) fb.vline(ox + 4, kGroundY - o.h, 2, false), fb.vline(ox + 5, kGroundY - o.h, 2, false);
-  }
-  int top = kGroundY - SPR_SHARK.h - y_ / 1000;
-  drawSprite(fb, SPR_SHARK, kSharkX, top);
-  char b[12]; StrBuf sb(b, sizeof b); sb.num(score_);
-  fb.text(127 - Framebuffer::textWidth(b), 0, b);
-  if (phase_ == GamePhase::Result) {
-    fb.fillRect(14, 8, 100, 40, false); fb.rect(14, 8, 100, 40);
-    fb.textCentered(11, "Ops! Quase!");
-    char r[32]; StrBuf s2(r, sizeof r); s2.put("Pontos: ").num(score_);
-    fb.textCentered(22, r);
-    StrBuf s3(r, sizeof r); s3.put(newRecord ? "Novo recorde!" : "Recorde: "); if (!newRecord) s3.num(best);
-    fb.textCentered(33, r);
-    fb.fillRect(0, 54, 128, 10, false);
-    drawResultFooter(fb);
-  }
-  if (paused_) drawPausedOverlay(fb);
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // 9.2 Tuba Reflexo
 // ════════════════════════════════════════════════════════════════════════════
@@ -267,55 +207,6 @@ void ReflexGame::pause(ms_t now) {
 void ReflexGame::framePresented(ms_t t) {
   // Mede a partir da APRESENTAÇÃO do sinal no display, não de quando entrou na fila.
   if (sub_ == Sub::Signal && signalRendered_ && !shownKnown_) { shownKnown_ = true; shownAt_ = t; }
-}
-
-void ReflexGame::draw(Framebuffer& fb, ms_t now) {
-  (void)now;
-  char b[32];
-  switch (sub_) {
-    case Sub::Ready:
-      drawIntro(fb, "TUBA REFLEXO", "Espere o AGORA!", "e toque rápido", best, nullptr);
-      if (best) { fb.fillRect(0, 38, 128, 8, false); StrBuf s(b, sizeof b); s.put("Recorde: ").num(best).put(" ms"); fb.textCentered(38, b); }
-      else { fb.fillRect(0, 38, 128, 8, false); fb.textCentered(38, "Recorde: --"); }
-      break;
-    case Sub::Waiting:
-      fb.textCentered(22, "ESPERE...", 2);
-      fb.textCentered(50, "não toque ainda");
-      break;
-    case Sub::Signal:
-      fb.fillRect(0, 0, 128, 64);
-      fb.textCentered(18, "AGORA!", 3, false);
-      signalRendered_ = true;
-      break;
-    case Sub::Done: {
-      StrBuf s(b, sizeof b); s.num(lastMs_).put(" ms");
-      fb.textCentered(4, b, 2);
-      const char* react = lastMs_ < 200 ? "Uau! Relâmpago!" : lastMs_ < 300 ? "Rápido!" : lastMs_ < 450 ? "Boa!" : "Dá pra melhorar";
-      fb.textCentered(24, react);
-      StrBuf s2(b, sizeof b);
-      if (newRecord) s2.put("Novo recorde!"); else { s2.put("Melhor: "); if (best) s2.num(best).put(" ms"); else s2.put("--"); }
-      fb.textCentered(36, b);
-      drawResultFooter(fb);
-      break;
-    }
-    case Sub::Early:
-      fb.textCentered(8, "Cedo demais!", 1);
-      fb.textCentered(22, "Rodada inválida");
-      fb.textCentered(34, "Espere o AGORA!");
-      drawResultFooter(fb);
-      break;
-    case Sub::Timeout:
-      fb.textCentered(12, "Tempo esgotado");
-      fb.textCentered(26, "Rodada inválida");
-      drawResultFooter(fb);
-      break;
-    case Sub::Interrupted:
-      fb.textCentered(12, "Rodada");
-      fb.textCentered(22, "interrompida");
-      fb.textCentered(34, "(sem recorde)");
-      drawResultFooter(fb);
-      break;
-  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -384,33 +275,6 @@ void FishGame::update(ms_t now) {
   }
 }
 
-void FishGame::draw(Framebuffer& fb, ms_t now) {
-  if (phase_ == GamePhase::Intro) {
-    drawIntro(fb, "HORA DO BOTE", "Toque com o peixe", "TODO dentro do quadro", best, nullptr);
-    return;
-  }
-  char b[24]; StrBuf sb(b, sizeof b); sb.put("Peixes: ").num(captures_);
-  fb.text(0, 0, b);
-  fb.rect(kBoxX, kBoxY, kBoxSize, kBoxSize);
-  // cantoneiras para destacar o quadro
-  fb.hline(kBoxX - 2, kBoxY - 2, 5); fb.vline(kBoxX - 2, kBoxY - 2, 5);
-  fb.hline(kBoxX + kBoxSize - 3, kBoxY + kBoxSize + 1, 5); fb.vline(kBoxX + kBoxSize + 1, kBoxY + kBoxSize - 3, 5);
-  ms_t gt = gameTime(now);
-  if (phase_ == GamePhase::Playing) {
-    if (catching_) fb.textCentered(kBoxY + 12, "NHAC!");
-    else drawSprite(fb, SPR_FISH, floorDiv1000(fishXsubAt(gt)), kFishY);
-  } else if (phase_ == GamePhase::Result) {
-    drawSprite(fb, SPR_FISH, lostX_, kFishY);
-    fb.fillRect(10, 50 - 12, 108, 12, false);
-    char r[32]; StrBuf s(r, sizeof r);
-    if (newRecord) s.put("Novo recorde: ").num(captures_); else s.put("Total ").num(captures_).put(" | Rec ").num(best);
-    fb.textCentered(42, r);
-    fb.fillRect(0, 54, 128, 10, false);
-    drawResultFooter(fb);
-  }
-  if (paused_) drawPausedOverlay(fb);
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // 9.4 No Tempo Certo
 // ════════════════════════════════════════════════════════════════════════════
@@ -474,70 +338,90 @@ void TimingGame::pause(ms_t now) {
   }
 }
 
-void TimingGame::draw(Framebuffer& fb, ms_t now) {
-  char b[40];
-  switch (sub_) {
-    case Sub::Ready: {
-      fb.textCentered(0, "NO TEMPO CERTO");
-      fb.hline(0, 9, 128);
-      fb.textCentered(13, "Pare o tempo em:");
-      StrBuf s(b, sizeof b); s.fixed2(targetCs_).put(" s");
-      fb.textCentered(24, b, 2);
-      StrBuf s2(b, sizeof b); s2.put("Recorde: ");
-      if (best) s2.fixed2(best).put('%'); else s2.put("--");
-      fb.textCentered(42, b);
-      fb.hline(0, 54, 128);
-      fb.textCentered(56, "Toque: começar");
-      break;
-    }
-    case Sub::Countdown: {
-      ms_t left = goAt_ > now ? goAt_ - now : 0;
-      int digit = (int)((left + 999) / 1000);
-      if (digit < 1) digit = 1;
-      if (digit > 3) digit = 3;
-      char d[2] = {(char)('0' + digit), 0};
-      StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" s");
-      fb.textCentered(0, b);
-      fb.textCentered(18, d, 4);
-      break;
-    }
-    case Sub::Running: {
-      ms_t e = now >= goAt_ ? now - goAt_ : 0;
-      StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" s");
-      fb.textCentered(0, b);
-      StrBuf s2(b, sizeof b); s2.fixed2((int64_t)(e / 10));
-      fb.textCentered(20, b, 3);
-      if (e < 400) fb.textCentered(48, "VAI!", 2);
-      else fb.textCentered(52, "Toque para parar");
-      break;
-    }
-    case Sub::Done: {
-      int32_t target = targetCs_ * 10;
-      int32_t diff = elapsed_ - target;
-      StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put("  Você ").fixed2(elapsed_ / 10);
-      fb.textCentered(0, b);
-      int32_t pct = proximity100(elapsed_, target);
-      StrBuf s2(b, sizeof b); s2.fixed2(pct).put('%');
-      fb.textCentered(12, b, 2);
-      StrBuf s3(b, sizeof b); s3.put("Diferença ").put(diff >= 0 ? '+' : '-').fixed2(tbAbs(diff) / 10).put(" s");
-      fb.textCentered(32, b);
-      StrBuf s4(b, sizeof b);
-      if (newRecord) s4.put("Novo recorde!"); else { s4.put("Recorde: "); if (best) s4.fixed2(best).put('%'); else s4.put("--"); }
-      fb.textCentered(42, b);
-      drawResultFooter(fb);
-      break;
-    }
-    case Sub::Timeout:
-      fb.textCentered(12, "Passou de 20 s!");
-      fb.textCentered(26, "Rodada encerrada");
-      drawResultFooter(fb);
-      break;
-    case Sub::Interrupted:
-      fb.textCentered(12, "Rodada interrompida");
-      fb.textCentered(26, "(sem recorde)");
-      drawResultFooter(fb);
-      break;
+// ════════════════════════════════════════════════════════════════════════════
+// Mergulho do Tuba (novo na v2)
+// ════════════════════════════════════════════════════════════════════════════
+int DiveGame::spawnIntervalMs() const { return tbMax(380, 900 - score_ * 20); }
+int DiveGame::fallSpeed() const { return tbMin(85, 35 + score_ * 2); }
+
+void DiveGame::begin(ms_t now, Rng* rng, bool easy) {
+  (void)now; (void)easy;
+  rng_ = rng; phase_ = GamePhase::Intro; paused_ = false;
+  score_ = 0; lives_ = kLives; sharkX_ = kW * 500;
+  for (auto& it : items_) it.active = false;
+}
+
+void DiveGame::startPlaying(ms_t now) {
+  phase_ = GamePhase::Playing;
+  pauseAccum_ = 0; paused_ = false;
+  startT_ = gameTime(now);
+  simT_ = 0; score_ = 0; lives_ = kLives; sharkX_ = kW * 500;
+  for (auto& it : items_) it.active = false;
+  nextSpawn_ = 800; invulnUntil_ = 0; lastJellyT_ = 0; lastJellyX_ = -100000; flash_ = 0;
+}
+
+void DiveGame::press(ms_t t, ms_t now) {
+  (void)t;
+  if (paused_) return;
+  if (phase_ == GamePhase::Intro) { startPlaying(now); return; }
+  if (phase_ == GamePhase::Result && now - resultAt_ >= (ms_t)kResultGuardMs) startPlaying(now);
+  // jogando: o controle é contínuo (inclinação/dedo), o toque não é uma ação
+}
+
+void DiveGame::spawn() {
+  int pct = score_ < 3 ? 0 : (score_ < 10 ? 25 : 35);
+  bool jelly = rng_->range(0, 99) < pct;
+  int32_t x = rng_->range(8, kW - 8) * 1000;
+  // justiça: duas águas-vivas seguidas nunca fecham a passagem perto uma da outra
+  if (jelly && simT_ - lastJellyT_ < 700 && tbAbs(x - lastJellyX_) < 34 * 1000) jelly = false;
+  for (auto& it : items_) {
+    if (it.active) continue;
+    it.active = true; it.jelly = jelly; it.x = x; it.y = -6 * 1000;
+    it.vy = (int16_t)(fallSpeed() + (jelly ? -5 : 0));
+    if (jelly) { lastJellyT_ = simT_; lastJellyX_ = x; }
+    return;
   }
+}
+
+void DiveGame::stepOnce() {
+  // controle: dedo leva o Tuba até o ponto; inclinação dá a velocidade
+  int32_t lim0 = kCatchDx * 1000, lim1 = (kW - kCatchDx) * 1000;
+  if (touchX_ >= 0) {
+    int32_t target = (int32_t)((touchX_ - kViewX0) * 1000 / kViewScale);
+    int32_t maxStep = 160 * kStepMs;  // 160 px/s
+    int32_t d = target - sharkX_;
+    sharkX_ += tbClamp(d, -maxStep, maxStep);
+  } else {
+    sharkX_ += (int32_t)tbClamp(tilt_, -1000, 1000) * 150 / 1000 * kStepMs;
+  }
+  sharkX_ = tbClamp(sharkX_, lim0, lim1);
+  for (auto& it : items_) {
+    if (!it.active) continue;
+    it.y += (int32_t)it.vy * kStepMs;
+    if (it.y > (kH + 8) * 1000) { it.active = false; continue; }
+    if (tbAbs(it.x - sharkX_) <= kCatchDx * 1000 && tbAbs(it.y - kSharkY * 1000) <= kCatchDy * 1000) {
+      it.active = false;
+      if (!it.jelly) { score_++; sfx_ = 1; }
+      else if (simT_ >= invulnUntil_) {
+        lives_--; invulnUntil_ = simT_ + 1000; flash_ = 1;
+        if (lives_ <= 0) {
+          phase_ = GamePhase::Result; sfx_ = 2;
+          outcome_.finished = true; outcome_.valid = true; outcome_.score = score_;
+          return;
+        }
+        sfx_ = 3;
+      }
+    }
+  }
+  if (simT_ >= nextSpawn_) { spawn(); nextSpawn_ = simT_ + (ms_t)spawnIntervalMs(); }
+}
+
+void DiveGame::update(ms_t now) {
+  if (phase_ != GamePhase::Playing || paused_) return;
+  ms_t target = gameTime(now) - startT_;
+  int guard = 0;
+  while (simT_ + kStepMs <= target && phase_ == GamePhase::Playing && guard++ < 2000) { stepOnce(); simT_ += kStepMs; }
+  if (phase_ == GamePhase::Result) resultAt_ = now;
 }
 
 }  // namespace tb

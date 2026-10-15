@@ -1,13 +1,16 @@
-// Os quatro minijogos. Regras e física independem da taxa de quadros:
+// Os cinco minijogos. Regras e física independem da taxa de quadros:
 // - Pula, Tuba!: passo fixo de 4 ms em subpixels inteiros (1/1000 px);
 // - Hora do Bote: posição analítica do peixe no TIMESTAMP da entrada;
-// - Reflexo / No Tempo Certo: relógio monotônico em ms.
+// - Reflexo / No Tempo Certo: relógio monotônico em ms;
+// - Mergulho (novo na v2): passo fixo de 10 ms, controle por inclinação ou dedo.
+// A lógica dos quatro jogos da v1 é a MESMA (mesmos testes); o desenho foi
+// refeito para a tela colorida: o "mundo" 128×64 da v1 é ampliado 3× (GameView).
 #pragma once
-#include "framebuffer.h"
+#include "gfx.h"
 
 namespace tb {
 
-enum class GameId : uint8_t { Jump = 0, Reflex = 1, Fish = 2, Timing = 3, Count = 4 };
+enum class GameId : uint8_t { Jump = 0, Reflex = 1, Fish = 2, Timing = 3, Dive = 4, Count = 5 };
 const char* gameTitle(GameId g);
 
 enum class GamePhase : uint8_t { Intro, Playing, Result };
@@ -21,12 +24,23 @@ struct GameOutcome {
   int32_t aux2 = 0;        // alvo em cs (tempo certo)
 };
 
+// Mundo lógico 128×64 da v1 -> tela (3×, centralizado).
+struct GameView {
+  static const int kScale = 3;
+  static const int kX0 = SCR_CX - 64 * kScale, kY0 = SCR_CY - 32 * kScale;
+  static float X(float lx) { return (float)kX0 + lx * (float)kScale; }
+  static float Y(float ly) { return (float)kY0 + ly * (float)kScale; }
+  static float S(float v) { return v * (float)kScale; }
+};
+
 class Game {
  public:
   virtual void begin(ms_t now, Rng* rng, bool easy) = 0;  // tela de introdução
   virtual void press(ms_t t, ms_t now) = 0;               // borda de toque validada
   virtual void update(ms_t now) = 0;
-  virtual void draw(Framebuffer& fb, ms_t now) = 0;
+  virtual void draw(Canvas& c, ms_t now) = 0;
+  // Controle contínuo (Mergulho): inclinação −1000..1000 e dedo (x na tela, −1 = sem dedo).
+  virtual void setControl(int tilt, int touchX) { (void)tilt; (void)touchX; }
   virtual void pause(ms_t now) { paused_ = true; pausedAt_ = now; }
   virtual void resume(ms_t now) { if (paused_) { pauseAccum_ += now - pausedAt_; paused_ = false; } }
   virtual void framePresented(ms_t t) { (void)t; }
@@ -42,7 +56,7 @@ class Game {
   bool newRecord = false; // marcado pelo app ao registrar
  protected:
   ms_t gameTime(ms_t now) const { return (paused_ ? pausedAt_ : now) - pauseAccum_; }
-  void drawResultFooter(Framebuffer& fb);
+  void drawResultFooter(Canvas& c);
   GamePhase phase_ = GamePhase::Intro;
   bool paused_ = false;
   ms_t pausedAt_ = 0, pauseAccum_ = 0;
@@ -57,7 +71,7 @@ class Game {
 struct Sprite { int w, h; const char* const* rows; };
 extern const Sprite SPR_SHARK;
 extern const Sprite SPR_FISH;
-void drawSprite(Framebuffer& fb, const Sprite& s, int x, int y, bool on = true);
+void drawSprite(Canvas& c, const Sprite& s, int x, int y, Color col);
 
 // ── 9.1 Pula, Tuba! ─────────────────────────────────────────────────────────
 struct JumpParams {
@@ -83,7 +97,7 @@ class JumpGame : public Game {
   void begin(ms_t now, Rng* rng, bool easy) override;
   void press(ms_t t, ms_t now) override;
   void update(ms_t now) override;
-  void draw(Framebuffer& fb, ms_t now) override;
+  void draw(Canvas& c, ms_t now) override;
 
   // Acesso para testes
   int32_t sharkYsub() const { return y_; }
@@ -124,7 +138,7 @@ class ReflexGame : public Game {
   void begin(ms_t now, Rng* rng, bool easy) override;
   void press(ms_t t, ms_t now) override;
   void update(ms_t now) override;
-  void draw(Framebuffer& fb, ms_t now) override;
+  void draw(Canvas& c, ms_t now) override;
   void pause(ms_t now) override;
   void framePresented(ms_t t) override;
   bool needsFastFrames() const override { return sub_ == Sub::Waiting || sub_ == Sub::Signal; }
@@ -157,7 +171,7 @@ class FishGame : public Game {
   void begin(ms_t now, Rng* rng, bool easy) override;
   void press(ms_t t, ms_t now) override;
   void update(ms_t now) override;
-  void draw(Framebuffer& fb, ms_t now) override;
+  void draw(Canvas& c, ms_t now) override;
   // Testes
   int32_t fishXsubAt(ms_t gameT) const;   // posição (subpx) da borda esquerda do sprite
   static bool fullyInside(int fishLeftPx);
@@ -187,7 +201,7 @@ class TimingGame : public Game {
   void begin(ms_t now, Rng* rng, bool easy) override;
   void press(ms_t t, ms_t now) override;
   void update(ms_t now) override;
-  void draw(Framebuffer& fb, ms_t now) override;
+  void draw(Canvas& c, ms_t now) override;
   void pause(ms_t now) override;
   bool needsFastFrames() const override { return sub_ == Sub::Countdown || sub_ == Sub::Running; }
   // proximidade em centésimos de % (0..10000), arredondada: 100 × (1 − erro/alvo)
@@ -203,6 +217,49 @@ class TimingGame : public Game {
   int32_t targetCs_ = 500;
   ms_t countStart_ = 0, goAt_ = 0;
   int32_t elapsed_ = 0;
+};
+
+// ── Mergulho do Tuba (novo) ─────────────────────────────────────────────────
+// Peixes e águas-vivas descem; o Tuba nada no fundo, guiado pela inclinação
+// (IMU) ou pelo dedo. Peixe = 1 ponto; água-viva = perde uma vida (3 vidas).
+// Justiça: nunca nascem duas águas-vivas que bloqueiem toda a passagem.
+class DiveGame : public Game {
+ public:
+  static const int kW = 100, kH = 100;     // mundo lógico (px)
+  static const int kStepMs = 10;
+  static const int kSharkY = 88;           // centro do Tuba
+  static const int kCatchDx = 11, kCatchDy = 7;
+  static const int kMaxItems = 8;
+  static const int kLives = 3;
+  static const int kViewScale = 3;
+  static const int kViewX0 = SCR_CX - kW * kViewScale / 2, kViewY0 = SCR_CY - kH * kViewScale / 2;
+  struct Item { int32_t x, y; int16_t vy; bool jelly, active; };
+
+  void begin(ms_t now, Rng* rng, bool easy) override;
+  void press(ms_t t, ms_t now) override;
+  void update(ms_t now) override;
+  void draw(Canvas& c, ms_t now) override;
+  void setControl(int tilt, int touchX) override { tilt_ = tilt; touchX_ = touchX; }
+
+  int score() const { return score_; }
+  int lives() const { return lives_; }
+  int32_t sharkX() const { return sharkX_; }   // subpx (×1000)
+  const Item* items() const { return items_; }
+  ms_t simTime() const { return simT_; }
+  int spawnIntervalMs() const;
+  int fallSpeed() const;  // px/s
+
+ private:
+  void startPlaying(ms_t now);
+  void stepOnce();
+  void spawn();
+  Item items_[kMaxItems];
+  int32_t sharkX_ = 50000;
+  int tilt_ = 0, touchX_ = -1;
+  int score_ = 0, lives_ = kLives;
+  ms_t simT_ = 0, startT_ = 0, nextSpawn_ = 0, invulnUntil_ = 0, lastJellyT_ = 0;
+  int32_t lastJellyX_ = -100000;
+  int flash_ = 0;
 };
 
 }  // namespace tb
