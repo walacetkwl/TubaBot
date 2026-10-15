@@ -1,4 +1,4 @@
-// Entrada do TubaBot v2: tela de toque capacitiva (CST9217).
+// Entrada do TubaBot: tela de toque capacitiva (FT6336G da ES3C28P, 320×240 em paisagem).
 // Substitui o TTP223 da cabeça: agora o toque tem POSIÇÃO e MOVIMENTO.
 //
 // Amostras brutas (tocando?, x, y, t) -> eventos. A classificação ao soltar é
@@ -40,16 +40,16 @@ struct TouchEvent {
 struct TouchTiming {
   uint16_t releaseDebounceMs = 40;  // une falhas curtas do controlador
   uint16_t tapMaxMs = 350;
-  uint16_t tapSlopPx = 22;          // movimento máximo para ainda ser "parado"
+  uint16_t tapSlopPx = 12;          // movimento máximo para ainda ser "parado"
   uint16_t doubleWindowMs = 300;
   uint16_t longMs = 600;
   uint16_t recoveryMs = 8000;
   uint16_t gameExitMs = 1500;
   uint16_t stuckMs = 20000;
-  uint16_t swipeMinPx = 60;
+  uint16_t swipeMinPx = 40;
   uint16_t swipeMaxMs = 650;
   uint16_t petMinMs = 350;          // movimento mais lento que isso é carinho, não deslize
-  uint16_t petStepPx = 140;
+  uint16_t petStepPx = 70;
 };
 
 enum class TouchMode : uint8_t { Ui, UiDouble, Game };

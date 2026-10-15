@@ -8,9 +8,10 @@ static const PersonalityTuning TUNE_PLAY = {2000, 4500, 1800, 4500, 34, 18, 25, 
 
 const char* screenName(Screen s) {
   static const char* const N[(int)Screen::Count] = {
-    "intro", "first_use", "face", "clock", "today", "launcher", "quick", "pomodoro", "timers", "timer_set", "stopwatch",
-    "alarms", "alarm_edit", "games", "game", "expressions", "breath", "level", "dice", "weather", "stats", "settings",
-    "config", "info", "torch", "confirm", "recovery", "resume", "screen_off", "ota"};
+    "intro", "first_use", "face", "clock", "today", "launcher", "more_apps", "quick", "pomodoro", "timers", "timer_set", "stopwatch",
+    "alarms", "alarm_edit", "games", "game", "expressions", "breath", "level", "dice", "weather", "stats",
+    "appearance", "color", "overlays", "volume", "brightness", "wifi", "system", "config", "info", "torch",
+    "confirm", "recovery", "resume", "screen_off", "ota"};
   return (int)s < (int)Screen::Count ? N[(int)s] : "?";
 }
 
@@ -21,12 +22,22 @@ void App::loadAll(ms_t now) {
   (void)now;
   uint8_t buf[BLOB_MAX];
   size_t len = 0;
+  // perfil de fábrica primeiro: ele define os padrões das preferências desta unidade
+  {
+    char fb[FACTORY_MAX];
+    size_t fl = 0;
+    facWhy_ = nullptr;
+    if (plat_.factoryLoad(fb, sizeof fb, &fl)) parseFactory(fb, fl, fac_, &facWhy_);
+    else { fac_ = FactoryConfig(); facWhy_ = "ausente"; }
+  }
   defaultSettings(set_);
+  applyFactoryDefaults(fac_, set_);
   DecodeResult r = DecodeResult::Empty;
   if (plat_.storageLoad(BlobKind::Settings, buf, sizeof buf, &len)) r = decodeBlob(BlobKind::Settings, SETTINGS_VERSION, buf, len, &set_, sizeof set_);
-  if (r != DecodeResult::Ok && r != DecodeResult::Empty && r != DecodeResult::Migrated) { defaultSettings(set_); recovered_ = true; setDirty_ = true; }
+  if (r != DecodeResult::Ok && r != DecodeResult::Empty && r != DecodeResult::Migrated) { defaultSettings(set_); applyFactoryDefaults(fac_, set_); recovered_ = true; setDirty_ = true; }
   if (r == DecodeResult::Migrated) setDirty_ = true;
   sanitizeSettings(set_);
+  if (fac_.model != Model::Pro) set_.showBattery = 0;
 
   defaultProgress(prog_);
   r = DecodeResult::Empty; len = 0;
@@ -73,13 +84,19 @@ void App::applyPrefs(ms_t now) {
     if (timers_[i].state() == RunState::Idle && timers_[i].durationMs() == 0) timers_[i].set(set_.timerPresetS[1 + i] * 1000);
   plat_.setTimezone(TZ_TABLE[set_.tzIndex].posix);
   if (!set_.micReactions) { sound_.reset(); face_.setDance(false, 0); }
+  if (fac_.model != Model::Pro) set_.showBattery = 0;
+  applyTheme();
   updateBrightness(now);
 }
 
 void App::begin(const HwCaps& caps, ms_t now, uint32_t seed, bool devBuild) {
   caps_ = caps; devBuild_ = devBuild;
   rng_.seed(seed);
-  loadAll(now);       // 1º: preferências — antes de QUALQUER saída
+  loadAll(now);       // 1º: fábrica + preferências — antes de QUALQUER saída
+  // Lite x Pro é propriedade de fábrica: no Lite não existe bateria (nem leitura, nem opções)
+  caps_.battery = caps.battery && fac_.model == Model::Pro;
+  appliedTheme_ = -1;
+  applyTheme();
   applyPrefs(now);
   pomo_.reset();
   for (int i = 0; i < kTimers; i++) timers_[i].set(set_.timerPresetS[1 + i] * 1000);
@@ -120,7 +137,8 @@ void App::noteInteraction(ms_t now) {
 }
 
 bool App::listScreen(Screen s) const {
-  return s == Screen::Launcher || s == Screen::GamesMenu || s == Screen::Settings || s == Screen::TimerSet;
+  return s == Screen::GamesMenu || s == Screen::TimerSet || s == Screen::Appearance || s == Screen::Overlays ||
+         s == Screen::System || s == Screen::Wifi;
 }
 
 void App::setInputModeFor(Screen s) {
@@ -134,11 +152,12 @@ void App::gotoScreen(Screen s, ms_t now) {
   if (screen_ == Screen::Game && s != Screen::Game && s != Screen::Confirm && s != Screen::RecoveryConfirm && s != Screen::ScreenOff) game_ = nullptr;
   Screen prev = screen_;
   screen_ = s; screenAt_ = now; forceFrame_ = true; lastInteraction_ = now;
-  pressedHit_ = -1; pressedItem_ = -1; quickDrag_ = -1;
+  pressedHit_ = -1; pressedItem_ = -1; quickDrag_ = -1; quickArm_ = -1;
   if (homeScreen(s)) homePage_ = s;
   setInputModeFor(s);
   if (s == Screen::Face) { face_.setExpression(baseExpr_, now); exprUntil_ = 0; }
-  if (listScreen(s)) buildList(now);
+  if (s != Screen::Face) dockUntil_ = 0;
+  if (listScreen(s) || gridScreen(s)) buildList(now);
   if (s == Screen::Expressions && prev != Screen::Expressions) exprSel_ = 0;
   canvas_.invalidateAll();
 }
@@ -152,9 +171,13 @@ void App::goBack(ms_t now) {
     case Screen::TimerSet: gotoScreen(Screen::Timers, now); break;
     case Screen::AlarmEdit: gotoScreen(Screen::Alarms, now); break;
     case Screen::Game: game_ = nullptr; gotoScreen(Screen::GamesMenu, now); break;
-    case Screen::Config: gotoScreen(set_.setupDone ? Screen::Settings : Screen::FirstUse, now); break;
+    case Screen::Config: gotoScreen(set_.setupDone ? Screen::Wifi : Screen::FirstUse, now); break;
     case Screen::Torch: gotoScreen(returnScreen_ == Screen::Torch ? homePage_ : returnScreen_, now); break;
-    case Screen::Info: gotoScreen(Screen::Launcher, now); break;
+    case Screen::ColorPick: case Screen::Overlays: gotoScreen(Screen::Appearance, now); break;
+    case Screen::Info: gotoScreen(returnScreen_ == Screen::System ? Screen::System : Screen::MoreApps, now); break;
+    case Screen::Stopwatch: case Screen::Alarms: case Screen::Weather: case Screen::Breath: case Screen::Dice:
+    case Screen::Expressions: case Screen::Stats: case Screen::Level:
+      gotoScreen(Screen::MoreApps, now); break;
     default:
       if (homeScreen(screen_)) return;
       gotoScreen(Screen::Launcher, now);
@@ -208,9 +231,27 @@ void App::react(Expr e, ms_t now, uint16_t ms, Pattern snd) {
 
 FaceStyle App::faceStyle() const {
   FaceStyle st;
-  st.eye = EYE_COLORS[set_.eyeColor].rgb;
-  st.glow = set_.eyeGlow != 0;
+  bool light = set_.theme != 0;
+  st.eye = exprColorRgb(set_.eyeColor, light);
+  st.glow = set_.eyeGlow != 0 && !light;  // no fundo branco o halo vira mancha: só no escuro
+  st.light = light;
+  st.fx = light ? mixColor(st.eye, 0x000000, 60) : (Color)0xFFFFFF;
+  st.zzz = light ? (Color)0x4F5BC4 : (Color)0xA9B4FF;
   return st;
+}
+
+// Tema da interface + cor de destaque (a cor das expressões). Trocar de tema
+// repinta a tela inteira com o novo fundo.
+void App::applyTheme() {
+  bool light = set_.theme != 0;
+  Color accent = exprColorRgb(set_.eyeColor, light);
+  // destaque legível: "branco" no escuro e "grafite" no claro viram neutros fortes
+  ui::setTheme(light, accent);
+  if (appliedTheme_ != (int)light || appliedAccent_ != accent) {
+    appliedTheme_ = light; appliedAccent_ = accent;
+    canvas_.invalidateAll();
+    forceFrame_ = true;
+  }
 }
 
 // ── alertas ─────────────────────────────────────────────────────────────────
@@ -446,8 +487,8 @@ void App::updatePersonality(ms_t now) {
     Progress& Pr = P();
     if (Pr.mood > 20) Pr.mood--; else if (Pr.mood < 20) Pr.mood++;  // deriva lenta, em memória
   }
-  // anti-marcação do AMOLED: o rosto e o relógio passeiam alguns pixels
-  if (now >= nextDrift_) { nextDrift_ = now + 120000; face_.setDrift(rng_.range(-8, 8), rng_.range(-6, 6)); }
+  // o rosto muda levemente de lugar de tempos em tempos (parece mais vivo)
+  if (now >= nextDrift_) { nextDrift_ = now + 120000; face_.setDrift(rng_.range(-3, 3), rng_.range(-3, 3)); }
   // dança: música detectada
   bool dancing = sound_.music() && set_.micReactions && screen_ == Screen::Face;
   face_.setDance(dancing, sound_.beatPhase(now));
@@ -464,10 +505,10 @@ void App::updatePersonality(ms_t now) {
     danceSince_ = 0;
     if (exprUntil_) exprUntil_ = now;
   }
-  if (screen_ != Screen::Face) return;
+  if (screen_ != Screen::Face && screen_ != Screen::ColorPick) return;
   // olhar: dedo > inclinação > ocioso
   if (input_.pressed() && !input_.stuck()) {
-    face_.setLookTarget(true, (input_.x() - SCR_CX) * 1000 / 180, (input_.y() - SCR_CY) * 1000 / 180);
+    face_.setLookTarget(true, (input_.x() - SCR_CX) * 1000 / 100, (input_.y() - (int)FACE_CY) * 1000 / 100);
   } else if (lookUntil_ > now) {
     face_.setLookTarget(true, lookX_, lookY_);
   } else if (set_.tiltLook && caps_.imu && motion_.active() && motion_.pose() != Pose::OnBack) {
@@ -575,36 +616,50 @@ void App::rollDice(ms_t now) {
   out_.play(Pattern::Babble, now, rng_.next());
 }
 
-// ── listas ──────────────────────────────────────────────────────────────────
+// ── listas e grades ─────────────────────────────────────────────────────────
 void App::buildList(ms_t now, bool keepScroll) {
   (void)now;
   itemN_ = 0;
-  auto add = [&](const char* label, const char* sub, Icon ic, Color col, int id) {
+  using ui::RowKind;
+  auto add = [&](const char* label, const char* sub, Icon ic, Color col, int id, RowKind kind = RowKind::Link, bool on = false) {
     if (itemN_ >= kListMax) return;
     tbStrlcpy(itemLabels_[itemN_], label, sizeof itemLabels_[0]);
     itemSubs_[itemN_][0] = 0;
     if (sub) tbStrlcpy(itemSubs_[itemN_], sub, sizeof itemSubs_[0]);
-    items_[itemN_] = ui::ListItem{itemLabels_[itemN_], sub ? itemSubs_[itemN_] : nullptr, ic, col, id};
+    items_[itemN_] = ui::ListItem{itemLabels_[itemN_], sub ? itemSubs_[itemN_] : nullptr, ic, col, id, kind, on};
     itemN_++;
   };
   char b[40];
-  int keep = list_.centered();
+  int keep = list_.scrollPx();
+  static const char* const ONOFF[] = {"desligado", "ligado"};
+  (void)ONOFF;
   switch (screen_) {
-    case Screen::Launcher:
-      add("Relógio", nullptr, Icon::Clock, ui::C_CLOCK, L_CLOCK);
+    case Screen::Launcher: {
+      // menu principal: 3×3, na ordem pedida
+      add("Jogos", nullptr, Icon::Games, ui::C_GAMES, L_GAMES);
       add("Pomodoro", nullptr, Icon::Tomato, ui::C_POMO, L_POMO);
-      add("Timers", nullptr, Icon::Timer, ui::C_TIMER, L_TIMERS);
+      add("Timer", nullptr, Icon::Timer, ui::C_TIMER, L_TIMERS);
+      add("Aparência", nullptr, Icon::Face, exprColorRgb(set_.eyeColor, false), L_LOOK);
+      StrBuf v(b, sizeof b); if (caps_.speaker) v.num(set_.volume).put('%');
+      add("Volume", caps_.speaker ? b : nullptr, set_.silent ? Icon::Silent : Icon::Speaker, ui::C_VOL, L_VOLUME);
+      char c[8]; StrBuf br(c, sizeof c); br.num((set_.brightness * 100 + 127) / 255).put('%');
+      add("Brilho", c, Icon::Brightness, ui::C_BRIGHT, L_BRIGHT);
+      add("Wi-Fi", nullptr, Icon::Wifi, ui::C_WIFI, L_WIFI);
+      add("Sistema", nullptr, Icon::Gear, ui::C_SET, L_SYSTEM);
+      add("Mais apps", nullptr, Icon::Plus, ui::C_INFO, L_MORE);
+      break;
+    }
+    case Screen::MoreApps:
       add("Cronômetro", nullptr, Icon::Stopwatch, ui::C_SW, L_SW);
       add("Alarmes", nullptr, Icon::Alarm, ui::C_ALARM, L_ALARMS);
-      add("Jogos", nullptr, Icon::Games, ui::C_GAMES, L_GAMES);
-      add("Expressões", nullptr, Icon::Sparkle, ui::C_EXPR, L_EXPR);
-      add("Respiração", nullptr, Icon::Breath, ui::C_BREATH, L_BREATH);
-      add("Nível", nullptr, Icon::Level, ui::C_LEVEL, L_LEVEL);
-      add("Sorteio", nullptr, Icon::Dice, ui::C_DICE, L_DICE);
+      add("Relógio", nullptr, Icon::Clock, ui::C_CLOCK, L_CLOCK);
       add("Clima", nullptr, Icon::Weather, ui::C_WEATHER, L_WEATHER);
+      add("Respirar", nullptr, Icon::Breath, ui::C_BREATH, L_BREATH);
+      add("Sorteio", nullptr, Icon::Dice, ui::C_DICE, L_DICE);
+      add("Expressões", nullptr, Icon::Sparkle, ui::C_EXPR, L_EXPR);
       add("Meu Tuba", nullptr, Icon::Heart, ui::C_STATS, L_STATS);
-      add("Ajustes", nullptr, Icon::Gear, ui::C_SET, L_SETTINGS);
-      add("Informações", nullptr, Icon::Info, ui::C_INFO, L_INFO);
+      if (caps_.imu) add("Nível", nullptr, Icon::Level, ui::C_LEVEL, L_LEVEL);
+      else add("Sobre", nullptr, Icon::Info, ui::C_INFO, L_INFO);
       break;
     case Screen::GamesMenu: {
       const Progress& Pr = P();
@@ -619,39 +674,54 @@ void App::buildList(ms_t now, bool keepScroll) {
           case GameId::Timing: if (Pr.timingBestPct100) s.fixed2(Pr.timingBestPct100).put('%'); else s.put("--"); break;
           default: s.num(Pr.diveBest).put(" peixes"); break;
         }
-        add(gameTitle((GameId)g), b, GI[g], GC[g], L_GAME0 + g);
+        add(gameTitle((GameId)g), b, GI[g], GC[g], L_GAME0 + g, RowKind::Action);
       }
       break;
     }
     case Screen::TimerSet:
       for (int i = 0; i < TIMER_PRESET_COUNT; i++) {
         StrBuf s(b, sizeof b); formatDuration(s, (ms_t)set_.timerPresetS[i] * 1000, false);
-        add(b, i == TIMER_PRESET_COUNT - 1 ? "personalizado (portal)" : nullptr, Icon::Timer, ui::C_TIMER, L_PRESET0 + i);
+        add(b, i == TIMER_PRESET_COUNT - 1 ? "personalizado no portal" : nullptr, Icon::Timer, ui::C_TIMER, L_PRESET0 + i, RowKind::Action);
       }
       break;
-    case Screen::Settings: {
-      static const char* const OFF[] = {"desligado", "ligado"};
-      StrBuf s(b, sizeof b); s.num((set_.brightness * 100 + 127) / 255).put('%');
-      add("Brilho", b, Icon::Brightness, ui::C_SET, S_BRIGHT);
-      StrBuf v(b, sizeof b); if (!caps_.speaker) v.put("sem alto-falante"); else v.num(set_.volume).put('%');
-      add("Volume", b, Icon::Speaker, ui::C_SET, S_VOLUME);
-      add("Cor dos olhos", EYE_COLORS[set_.eyeColor].name, Icon::Face, EYE_COLORS[set_.eyeColor].rgb, S_EYE);
-      add("Brilho dos olhos", OFF[set_.eyeGlow], Icon::Sparkle, ui::C_SET, S_GLOW);
+    case Screen::Appearance: {
+      add("Tema", set_.theme ? "Claro" : "Escuro", set_.theme ? Icon::Sun : Icon::Moon, ui::C_LOOK, S_THEME, RowKind::Value);
+      add("Cor das expressões", EXPR_COLORS[set_.eyeColor].name, Icon::Palette, exprColorRgb(set_.eyeColor, false), S_EYE, RowKind::Link);
+      int n = set_.showClock + set_.showWeather + (caps_.battery ? set_.showBattery : 0);
+      StrBuf o(b, sizeof b); if (!n) o.put("rosto limpo"); else o.num(n).put(n == 1 ? " item" : " itens");
+      add("Informações na tela", b, Icon::Info, ui::C_INFO, S_OVERLAYS, RowKind::Link);
+      add("Brilho dos olhos", nullptr, Icon::Sparkle, ui::C_EXPR, S_GLOW, RowKind::Toggle, set_.eyeGlow);
       static const char* const WF[] = {"Digital", "Analógico", "Tuba"};
-      add("Mostrador", WF[set_.watchFace], Icon::Clock, ui::C_CLOCK, S_FACE);
-      add("Personalidade", set_.personality ? "Brincalhão" : "Tranquilo", Icon::Heart, ui::C_STATS, S_PERS);
+      add("Relógio", WF[set_.watchFace], Icon::Clock, ui::C_CLOCK, S_FACE, RowKind::Value);
+      break;
+    }
+    case Screen::Overlays:
+      add("Mostrar hora", nullptr, Icon::Clock, ui::C_CLOCK, S_SHOW_CLOCK, RowKind::Toggle, set_.showClock);
+      add("Mostrar clima", nullptr, Icon::PartCloud, ui::C_WEATHER, S_SHOW_WEATHER, RowKind::Toggle, set_.showWeather);
+      if (caps_.battery) add("Mostrar bateria", nullptr, Icon::Bolt, ui::C_VOL, S_SHOW_BATT, RowKind::Toggle, set_.showBattery);
+      break;
+    case Screen::Wifi: {
+      NetStatus ns; plat_.netStatus(ns);
+      const char* home = !ns.staConfigured ? "não configurada" : ns.sta == StaState::Connected ? ns.staSsid : ns.sta == StaState::Connecting ? "conectando..." : "sem conexão";
+      add("Rede de casa", home, Icon::Wifi, ui::C_WIFI, S_WIFI_HOME, RowKind::Value);
+      add("Configurar pelo celular", "QR Code + portal", Icon::Info, ui::C_INFO, S_WIFI_SETUP, RowKind::Link);
+      add("Rede do Tuba", nullptr, Icon::Wifi, ui::C_FACE, S_WIFI_AP, RowKind::Toggle, ns.apActive);
+      if (ns.staConfigured) add("Esquecer rede de casa", nullptr, Icon::Cross, ui::BAD, S_WIFI_FORGET, RowKind::Action);
+      break;
+    }
+    case Screen::System: {
+      add("Personalidade", set_.personality ? "Brincalhão" : "Tranquilo", Icon::Heart, ui::C_STATS, S_PERS, RowKind::Value);
       static const char* const AN[] = {"Calma", "Normal", "Animada"};
-      add("Animação", AN[set_.animLevel], Icon::Sparkle, ui::C_SET, S_ANIM);
-      add("Formato 24 h", OFF[set_.clock24h], Icon::Clock, ui::C_SET, S_24H);
-      StrBuf o(b, sizeof b); if (!set_.screenOffS) o.put("nunca"); else { o.put("após "); formatDuration(o, (ms_t)set_.screenOffS * 1000, false); }
-      add("Apagar a tela", b, Icon::Moon, ui::C_SET, S_SCREENOFF);
-      add("Reagir a movimento", OFF[set_.imuReactions], Icon::Level, ui::C_LEVEL, S_IMU);
-      add("Reagir a sons", OFF[set_.micReactions], Icon::Note, ui::C_GAMES, S_MIC);
-      if (caps_.motor) add("Vibração", OFF[set_.vibration], Icon::Vibrate, ui::C_SET, S_VIB);
-      add("Silencioso", OFF[set_.silent], Icon::Silent, ui::C_SET, S_SILENT);
-      add("Girar 180°", OFF[set_.rotate180], Icon::Reset, ui::C_SET, S_ROTATE);
-      add("Rede e portal", nullptr, Icon::Wifi, ui::C_WEATHER, S_NET);
-      add("Informações", nullptr, Icon::Info, ui::C_INFO, S_INFO);
+      add("Animação", AN[set_.animLevel], Icon::Sparkle, ui::C_EXPR, S_ANIM, RowKind::Value);
+      StrBuf o(b, sizeof b); if (!set_.screenOffS) o.put("nunca"); else formatDuration(o, (ms_t)set_.screenOffS * 1000, false);
+      add("Apagar a tela", b, Icon::Moon, ui::C_SET, S_SCREENOFF, RowKind::Value);
+      add("Formato 24 h", nullptr, Icon::Clock, ui::C_CLOCK, S_24H, RowKind::Toggle, set_.clock24h);
+      add("Silencioso", nullptr, Icon::Silent, ui::C_VOL, S_SILENT, RowKind::Toggle, set_.silent);
+      if (caps_.mic) add("Reagir a sons", nullptr, Icon::Note, ui::C_GAMES, S_MIC, RowKind::Toggle, set_.micReactions);
+      if (caps_.imu) add("Reagir a movimento", nullptr, Icon::Level, ui::C_LEVEL, S_IMU, RowKind::Toggle, set_.imuReactions);
+      add("Girar 180°", nullptr, Icon::Reset, ui::C_SET, S_ROTATE, RowKind::Toggle, set_.rotate180);
+      add("Informações", TB_VERSION, Icon::Info, ui::C_INFO, S_INFO, RowKind::Link);
+      add("Restaurar padrão de fábrica", nullptr, Icon::Reset, ui::BAD, S_FACTORY_RESET, RowKind::Action);
       break;
     }
     default: break;
@@ -663,9 +733,14 @@ void App::cycleSetting(int id, ms_t now) {
   switch (id) {
     case S_BRIGHT: { static const uint8_t L[] = {64, 128, 191, 255}; int i = 0; while (i < 4 && L[i] <= set_.brightness) i++; set_.brightness = L[i % 4]; break; }
     case S_VOLUME: { static const uint8_t L[] = {0, 25, 50, 75, 100}; int i = 0; while (i < 5 && L[i] <= set_.volume) i++; set_.volume = L[i % 5]; break; }
-    case S_EYE: set_.eyeColor = (uint8_t)((set_.eyeColor + 1) % EYE_COLOR_COUNT); break;
+    case S_EYE: gotoScreen(Screen::ColorPick, now); return;
+    case S_OVERLAYS: gotoScreen(Screen::Overlays, now); return;
+    case S_THEME: set_.theme = !set_.theme; break;
     case S_GLOW: set_.eyeGlow = !set_.eyeGlow; break;
     case S_FACE: set_.watchFace = (uint8_t)((set_.watchFace + 1) % WATCHFACE_COUNT); break;
+    case S_SHOW_CLOCK: set_.showClock = !set_.showClock; break;
+    case S_SHOW_WEATHER: set_.showWeather = !set_.showWeather; if (set_.showWeather && !set_.weatherEnabled) toast("Ative o clima no portal", now, 2500); break;
+    case S_SHOW_BATT: if (!caps_.battery) return; set_.showBattery = !set_.showBattery; break;
     case S_PERS: set_.personality = set_.personality ? 0 : 1; break;
     case S_ANIM: set_.animLevel = (uint8_t)((set_.animLevel + 1) % 3); break;
     case S_24H: set_.clock24h = !set_.clock24h; break;
@@ -675,15 +750,34 @@ void App::cycleSetting(int id, ms_t now) {
     case S_VIB: set_.vibration = !set_.vibration; break;
     case S_SILENT: set_.silent = !set_.silent; break;
     case S_ROTATE: set_.rotate180 = !set_.rotate180; break;
-    case S_NET: openConfig(now); return;
-    case S_INFO: infoPage_ = 0; gotoScreen(Screen::Info, now); return;
+    case S_NIGHTDIM: set_.nightDim = !set_.nightDim; break;
+    case S_NET: case S_WIFI_SETUP: openConfig(now); return;
+    case S_WIFI_HOME: openConfig(now); return;
+    case S_WIFI_AP: {
+      NetStatus ns; plat_.netStatus(ns);
+      if (ns.apActive) { plat_.apClose(); toast("Rede do Tuba fechada", now); event("rede fechada"); }
+      else { plat_.apOpen(); toast("Rede do Tuba aberta", now); event("rede aberta"); }
+      out_.play(Pattern::Tap, now);
+      buildList(now, true);
+      return;
+    }
+    case S_WIFI_FORGET: confirm(C_WIFI_FORGET, now); return;
+    case S_FACTORY_RESET: confirm(C_FACTORY_RESET, now); return;
+    case S_INFO: infoPage_ = 0; returnScreen_ = Screen::System; gotoScreen(Screen::Info, now); return;
     default: return;
   }
   sanitizeSettings(set_);
   applyPrefs(now);
+  applyTheme();
   markSettings(now);
   out_.play(id == S_VOLUME ? Pattern::Boop : Pattern::Tap, now);
   buildList(now, true);
+}
+
+void App::confirm(int action, ms_t now) {
+  confirmAction_ = action;
+  returnScreen_ = screen_;
+  gotoScreen(Screen::Confirm, now);
 }
 
 // ── gestos e botões ─────────────────────────────────────────────────────────
@@ -698,7 +792,7 @@ void App::onListPick(int id, ms_t now) {
     gotoScreen(Screen::Timers, now);
     return;
   }
-  if (id >= S_BRIGHT && id <= S_INFO) { cycleSetting(id, now); return; }
+  if (id >= S_BRIGHT && id < S_LAST) { cycleSetting(id, now); return; }
   switch (id) {
     case L_CLOCK: goHome(now, Screen::Clock); break;
     case L_POMO: gotoScreen(Screen::Pomodoro, now); break;
@@ -712,8 +806,25 @@ void App::onListPick(int id, ms_t now) {
     case L_DICE: gotoScreen(Screen::Dice, now); break;
     case L_WEATHER: gotoScreen(Screen::Weather, now); break;
     case L_STATS: gotoScreen(Screen::Stats, now); break;
-    case L_SETTINGS: gotoScreen(Screen::Settings, now); break;
-    case L_INFO: infoPage_ = 0; gotoScreen(Screen::Info, now); break;
+    case L_SYSTEM: gotoScreen(Screen::System, now); break;
+    case L_INFO: infoPage_ = 0; returnScreen_ = Screen::MoreApps; gotoScreen(Screen::Info, now); break;
+    case L_LOOK: gotoScreen(Screen::Appearance, now); break;
+    case L_VOLUME: gotoScreen(Screen::Volume, now); break;
+    case L_BRIGHT: gotoScreen(Screen::Brightness, now); break;
+    case L_WIFI: gotoScreen(Screen::Wifi, now); break;
+    case L_MORE: gotoScreen(Screen::MoreApps, now); break;
+  }
+}
+
+// Controles deslizantes (Volume, Brilho e painel rápido): x na tela -> valor.
+void App::setSlider(int id, int x, bool commit, ms_t now) {
+  int pm = tbClamp((int)(((float)x - ui::SLIDER_X0) * 1000.f / ui::SLIDER_W), 0, 1000);
+  if (id == B_SL_BRIGHT || id == B_Q_BRIGHT) set_.brightness = (uint8_t)tbClamp(10 + pm * 245 / 1000, 10, 255);
+  else set_.volume = (uint8_t)((pm + 5) / 10);
+  applyPrefs(now);
+  if (commit) {
+    markSettings(now);
+    if (id == B_SL_VOL || id == B_Q_VOL) out_.play(Pattern::Boop, now);
   }
 }
 
@@ -723,6 +834,37 @@ void App::onButton(int id, ms_t now) {
   if (id == B_BACK) { out_.play(Pattern::Menu, now); goBack(now); return; }
   forceFrame_ = true;
   switch (screen_) {
+    case Screen::Face:
+      dockUntil_ = 0;
+      out_.play(Pattern::Tap, now);
+      transDir_ = 0;
+      if (id == B_DOCK_MENU) gotoScreen(Screen::Launcher, now);
+      else if (id == B_DOCK_POMO) gotoScreen(Screen::Pomodoro, now);
+      else if (id == B_DOCK_GAMES) gotoScreen(Screen::GamesMenu, now);
+      break;
+    case Screen::ColorPick:
+      if (id >= B_COLOR0 && id < B_COLOR0 + EXPR_COLOR_COUNT) {
+        set_.eyeColor = (uint8_t)(id - B_COLOR0);
+        applyTheme(); markSettings(now);
+        face_.setExpression(Expr::Happy, now); exprUntil_ = 0;
+        out_.play(Pattern::Boop, now);
+        event("cor das expressões");
+      }
+      break;
+    case Screen::Volume: case Screen::Brightness: {
+      bool vol = screen_ == Screen::Volume;
+      if (id == B_SL_MINUS || id == B_SL_PLUS) {
+        int d = id == B_SL_PLUS ? 1 : -1;
+        if (vol) set_.volume = (uint8_t)tbClamp((int)set_.volume + 10 * d, 0, 100);
+        else set_.brightness = (uint8_t)tbClamp((int)set_.brightness + 25 * d, 10, 255);
+        applyPrefs(now); markSettings(now);
+        out_.play(vol ? Pattern::Boop : Pattern::Tap, now);
+      } else if (id == B_SL_TEST) {
+        if (vol) { set_.silent = !set_.silent; applyPrefs(now); markSettings(now); out_.play(Pattern::Boop, now); }
+        else { set_.nightDim = !set_.nightDim; markSettings(now); updateBrightness(now); out_.play(Pattern::Tap, now); }
+      }
+      break;
+    }
     case Screen::Pomodoro:
       if (id == B_PLAY) { pomo_.toggle(now); writeCheckpoint(now); out_.play(Pattern::Tap, now); event("pomodoro"); }
       else if (id == B_SKIP) { pomo_.skip(now); writeCheckpoint(now); out_.play(Pattern::Tap, now); event("etapa pulada"); }
@@ -799,9 +941,10 @@ void App::onButton(int id, ms_t now) {
       break;
     case Screen::Quick:
       if (id == B_Q_SILENT) { set_.silent = !set_.silent; applyPrefs(now); markSettings(now); toast(set_.silent ? "Silencioso: ligado" : "Silencioso: desligado", now); }
+      else if (id == B_Q_THEME) { set_.theme = !set_.theme; applyTheme(); markSettings(now); toast(set_.theme ? "Tema claro" : "Tema escuro", now); }
       else if (id == B_Q_MIC) { set_.micReactions = !set_.micReactions; applyPrefs(now); markSettings(now); toast(set_.micReactions ? "Reagir a sons: ligado" : "Microfone ignorado", now); }
       else if (id == B_Q_TORCH) { returnScreen_ = homePage_; gotoScreen(Screen::Torch, now); updateBrightness(now); }
-      else if (id == B_Q_NET) openConfig(now);
+      else if (id == B_Q_NET) gotoScreen(Screen::Wifi, now);
       break;
     case Screen::Info:
       if (id == B_PAGE_NEXT) { infoPage_ = (infoPage_ + 1) % 6; transDir_ = -1; screenAt_ = now; }
@@ -809,10 +952,12 @@ void App::onButton(int id, ms_t now) {
     case Screen::Config: case Screen::FirstUse:
       if (id == B_PAGE_NEXT) { configPage_ = (configPage_ + 1) % 3; transDir_ = -1; screenAt_ = now; }
       else if (id == B_FIRST_OFFLINE) { set_.setupDone = 1; markSettings(now); plat_.apClose(); event("usar offline"); goHome(now); }
-      else if (id == B_CFG_CLOSE) { plat_.apClose(); toast("Rede do Tuba fechada", now); event("rede fechada"); gotoScreen(Screen::Settings, now); }
+      else if (id == B_CFG_CLOSE) { plat_.apClose(); toast("Rede do Tuba fechada", now); event("rede fechada"); gotoScreen(Screen::Wifi, now); }
       break;
     case Screen::Confirm:
       if (id == B_OK) {
+        if (confirmAction_ == C_FACTORY_RESET) { confirmAction_ = C_NONE; factoryReset(now); return; }
+        if (confirmAction_ == C_WIFI_FORGET) { forgetWifi(); toast("Rede de casa esquecida", now); }
         if (confirmAction_ == C_CANCEL_POMO) { pomo_.cancel(); event("pomodoro cancelado"); }
         if (confirmAction_ == C_SW_RESET) { sw_.reset(); lapN_ = 0; event("cronômetro zerado"); }
         writeCheckpoint(now);
@@ -839,7 +984,8 @@ void App::onFaceTouch(const TouchEvent& e, ms_t now) {
       Pr.boops++;
       if (Pr.boops % 20 == 0) markProgress(now);
       face_.bounce(now);
-      lookX_ = (e.x - SCR_CX) * 1000 / 180; lookY_ = (e.y - SCR_CY) * 1000 / 180; lookUntil_ = now + 900;
+      dockUntil_ = now + 4000;   // controles aparecem e somem sozinhos
+      lookX_ = (e.x - SCR_CX) * 1000 / 100; lookY_ = (e.y - (int)FACE_CY) * 1000 / 100; lookUntil_ = now + 900;
       bool playful = set_.personality == (uint8_t)Personality::Brincalhao;
       int r = rng_.range(0, 99);
       if (r < (playful ? 40 : 25)) react(Expr::Hit, now, 900, Pattern::Giggle);
@@ -928,8 +1074,9 @@ int App::listIndexOf(int id) const { for (int i = 0; i < itemN_; i++) if (items_
 bool App::listItemPos(int id, int& x, int& y) {
   int i = listIndexOf(id);
   if (i < 0) return false;
+  if (gridScreen(screen_)) { x = (int)ui::GridGeom::cx(i); y = (int)ui::GridGeom::cy(i); return true; }
   list_.scrollTo(i);
-  x = SCR_CX; y = SCR_CY;
+  list_.rowCenter(i, x, y);
   return true;
 }
 
@@ -966,29 +1113,26 @@ void App::handleTouch(const TouchEvent& e, ms_t now) {
     return;
   }
   // ── pressionar / arrastar ──
-  bool isList = listScreen(screen_);
+  bool isList = listScreen(screen_), isGrid = gridScreen(screen_);
+  auto isSlider = [](int h) { return h == B_Q_BRIGHT || h == B_Q_VOL || h == B_SL_VOL || h == B_SL_BRIGHT; };
   if (e.type == TouchEv::Down) {
     suppressSwipe_ = false;
     pressedHit_ = hitTest(e.x, e.y);
     if (isList && pressedHit_ < 0) { list_.onDown(e.y, now); listTouch_ = true; pressedItem_ = list_.hit(e.x, e.y); }
-    quickArm_ = (screen_ == Screen::Quick && (pressedHit_ == B_Q_BRIGHT || pressedHit_ == B_Q_VOL)) ? pressedHit_ : -1;
+    if (isGrid && pressedHit_ < 0) pressedItem_ = ui::gridHit(itemN_, e.x, e.y);
+    quickArm_ = isSlider(pressedHit_) ? pressedHit_ : -1;
   }
-  // controle deslizante só "pega" com movimento horizontal (deslizar para cima continua fechando o painel)
-  if (e.type == TouchEv::Move && quickArm_ >= 0 && quickDrag_ < 0 && tbAbs(e.x - e.x0) > 12 && tbAbs(e.x - e.x0) > tbAbs(e.y - e.y0)) quickDrag_ = quickArm_;
-  if ((e.type == TouchEv::Move && quickDrag_ >= 0) || (e.type == TouchEv::Tap && quickArm_ >= 0)) {
-    int qd = quickDrag_ >= 0 ? quickDrag_ : quickArm_;
-    int pm = tbClamp((e.x - 108) * 1000 / 250, 0, 1000);
-    if (qd == B_Q_BRIGHT) set_.brightness = (uint8_t)tbClamp(10 + pm * 245 / 1000, 10, 255);
-    else set_.volume = (uint8_t)(pm / 10);
-    applyPrefs(now);
-    if (e.type == TouchEv::Tap) { markSettings(now); quickArm_ = -1; return; }
-  }
+  // controle deslizante só "pega" com movimento horizontal (deslizar na vertical continua sendo gesto)
+  if (e.type == TouchEv::Move && quickArm_ >= 0 && quickDrag_ < 0 && tbAbs(e.x - e.x0) > 8 && tbAbs(e.x - e.x0) > tbAbs(e.y - e.y0)) quickDrag_ = quickArm_;
+  if (e.type == TouchEv::Move && quickDrag_ >= 0) setSlider(quickDrag_, e.x, false, now);
+  if (e.type == TouchEv::Tap && quickArm_ >= 0) { setSlider(quickArm_, e.x, true, now); quickArm_ = -1; pressedHit_ = -1; return; }
   if (e.type == TouchEv::Move && isList && listTouch_) { list_.onMove(e.y, now); if (list_.dragged()) pressedItem_ = -1; }
+  if (e.type == TouchEv::Move && isGrid && pressedItem_ >= 0 && ui::gridHit(itemN_, e.x, e.y) != pressedItem_) pressedItem_ = -1;
   if (e.type == TouchEv::Move && pressedHit_ >= 0 && hitTest(e.x, e.y) != pressedHit_) pressedHit_ = -1;
   if (e.type == TouchEv::Up) {
     if (isList && listTouch_) list_.onUp(e.vy);
     listTouch_ = false;
-    if (quickDrag_ >= 0) { suppressSwipe_ = true; markSettings(now); if (quickDrag_ == B_Q_VOL) out_.play(Pattern::Boop, now); quickDrag_ = -1; return; }
+    if (quickDrag_ >= 0) { suppressSwipe_ = true; setSlider(quickDrag_, e.x, true, now); quickDrag_ = -1; quickArm_ = -1; return; }
     return;
   }
   if (e.type == TouchEv::Down || e.type == TouchEv::Move) {
@@ -999,11 +1143,16 @@ void App::handleTouch(const TouchEvent& e, ms_t now) {
   if (e.type == TouchEv::Tap || e.type == TouchEv::LongRelease) {
     int h = hitTest(e.x, e.y);
     pressedHit_ = -1;
-    if (h >= 0 && h != B_Q_BRIGHT && h != B_Q_VOL) { onButton(h, now); return; }
+    if (h >= 0 && !isSlider(h)) { onButton(h, now); return; }
     if (isList) {
       if (e.type == TouchEv::Tap && !list_.dragged()) { int i = list_.hit(e.x, e.y); if (i >= 0) onListPick(items_[i].id, now); }
       pressedItem_ = -1;
       return;
+    }
+    if (isGrid) {
+      int i = e.type == TouchEv::Tap ? ui::gridHit(itemN_, e.x, e.y) : -1;
+      pressedItem_ = -1;
+      if (i >= 0) { onListPick(items_[i].id, now); return; }
     }
   }
   // ── deslizes e toques por tela ──
@@ -1088,6 +1237,7 @@ void App::handleSound(SoundEv e, ms_t now) {
 }
 
 void App::powerUpdate(const PowerState& p, ms_t now) {
+  if (!caps_.battery) { power_ = PowerState(); return; }  // TubaBot Lite: sem bateria
   bool wasCharging = power_.charging;
   power_ = p;
   if (p.charging && !wasCharging && power_.known && screen_ != Screen::Game) {
@@ -1111,7 +1261,7 @@ void App::hwButton(HwButton b, bool longPress, ms_t now) {
   if (b == HwButton::Boot && longPress) { openConfig(now); return; }  // recuperação independente do toque
   if (screen_ == Screen::ScreenOff) { wake(now); return; }
   if (alertN_) { ackAlert(now, false); return; }
-  if (b == HwButton::Power) sleepScreen(now);
+  if (b == HwButton::Power || screen_ == Screen::Face) sleepScreen(now);  // ES3C28P: BOOT no rosto apaga a tela
   else goHome(now);
 }
 
@@ -1119,7 +1269,7 @@ void App::hwButton(HwButton b, bool longPress, ms_t now) {
 uint32_t App::frameIntervalMs(ms_t now) const {
   if (screen_ == Screen::ScreenOff) return 250;
   if (screen_ == Screen::Torch) return 1000;
-  if (screen_ == Screen::Intro || screen_ == Screen::Face) return 33;
+  if (screen_ == Screen::Intro || screen_ == Screen::Face || screen_ == Screen::ColorPick) return 33;
   if (screen_ == Screen::Game && game_ && (game_->needsFastFrames() || game_->phase() == GamePhase::Playing)) return 33;
   if (alertN_) return 50;
   if (input_.pressed() || list_.moving() || now - screenAt_ < 400 || toastUntil_ > now) return 33;
@@ -1153,7 +1303,7 @@ bool App::tick(ms_t now) {
   if (screen_ == Screen::Intro && now - bootAt_ >= (set_.shortIntro ? INTRO_SHORT_MS : INTRO_FULL_MS)) {
     if (!set_.setupDone) { plat_.apOpen(); configPage_ = 0; gotoScreen(Screen::FirstUse, now); }
     else if (checkpointPending()) gotoScreen(Screen::Resume, now);
-    else { goHome(now); out_.play(Pattern::Babble, now, rng_.next()); }
+    else { goHome(now); dockUntil_ = now + 3500; out_.play(Pattern::Babble, now, rng_.next()); }
   }
   if (screen_ == Screen::FirstUse && set_.setupDone) goHome(now);  // concluído pelo portal
 
@@ -1188,6 +1338,7 @@ bool App::tick(ms_t now) {
   }
   if (rollUntil_ && now >= rollUntil_) { rollUntil_ = 0; out_.play(Pattern::Tap, now); forceFrame_ = true; }
   if (listScreen(screen_)) list_.tick(now);
+  if (screen_ == Screen::Face && dockUntil_ && now >= dockUntil_ + 300) { dockUntil_ = 0; forceFrame_ = true; }
 
   updatePersonality(now);
   const PersonalityTuning& tune = set_.personality ? TUNE_PLAY : TUNE_CALM;
@@ -1200,13 +1351,27 @@ bool App::tick(ms_t now) {
                   screen_ != Screen::FirstUse && screen_ != Screen::Confirm && screen_ != Screen::RecoveryConfirm && screen_ != Screen::Resume &&
                   screen_ != Screen::Torch && !(screen_ == Screen::Breath && breathOn_) && !(screen_ == Screen::Stopwatch && sw_.state() == RunState::Running);
   if (set_.screenOffS && canSleep && !alertN_ && !input_.pressed() && now - lastInteraction_ >= (ms_t)set_.screenOffS * 1000) sleepScreen(now);
-  // menus e apps voltam ao rosto após inatividade
-  bool listy = screen_ == Screen::Launcher || screen_ == Screen::Quick || screen_ == Screen::GamesMenu || screen_ == Screen::Settings ||
-               screen_ == Screen::Info || screen_ == Screen::Expressions || screen_ == Screen::Confirm || screen_ == Screen::TimerSet ||
-               screen_ == Screen::Stats || screen_ == Screen::Level || screen_ == Screen::Dice;
-  if (listy && !alertN_ && !input_.pressed() && now - lastInteraction_ >= 30000) {
-    if (screen_ == Screen::Confirm) gotoScreen(returnScreen_, now); else goHome(now);
+  // sem interação, tudo volta ao rosto em tela cheia (timers/Pomodoro seguem rodando)
+  ms_t idleLimit = 0;
+  switch (screen_) {
+    case Screen::Face: case Screen::Intro: case Screen::FirstUse: case Screen::Game: case Screen::Ota: case Screen::ScreenOff:
+    case Screen::Torch: case Screen::Resume: case Screen::RecoveryConfirm:
+      break;
+    case Screen::Config: idleLimit = 180000; break;   // tempo para ler o QR e configurar
+    case Screen::Breath: idleLimit = breathOn_ ? 0 : 30000; break;
+    case Screen::Stopwatch: idleLimit = sw_.state() == RunState::Running ? 0 : 45000; break;
+    case Screen::Launcher: case Screen::MoreApps: case Screen::Quick: case Screen::GamesMenu: case Screen::Appearance:
+    case Screen::ColorPick: case Screen::Overlays: case Screen::Volume: case Screen::Brightness: case Screen::Wifi:
+    case Screen::System: case Screen::Confirm: case Screen::TimerSet: case Screen::Info:
+      idleLimit = 20000; break;
+    default: idleLimit = 45000; break;  // apps (Pomodoro, Timer, relógio...)
   }
+  if (idleLimit && !alertN_ && !input_.pressed() && now - lastInteraction_ >= idleLimit) {
+    if (screen_ == Screen::Confirm) confirmAction_ = C_NONE;
+    transDir_ = 0;
+    goHome(now, Screen::Face);
+  }
+  applyTheme();
 
   updateBrightness(now);
   out_.update(now);
@@ -1216,7 +1381,7 @@ bool App::tick(ms_t now) {
     forceFrame_ = false;
     lastRender_ = now;
     hitN_ = 0;
-    canvas_.beginFrame(0);
+    canvas_.beginFrame(ui::BG);
     render(now);
     canvas_.setOrigin(0, 0);
     canvas_.setGlobalAlpha(255);
@@ -1232,6 +1397,7 @@ void App::forgetWifi() { plat_.wifiForget(); event("rede doméstica esquecida");
 void App::resetPreferences(ms_t now) {
   Settings keep = set_;
   defaultSettings(set_);
+  applyFactoryDefaults(fac_, set_);
   set_.setupDone = keep.setupDone;  // não volta ao primeiro uso só por redefinir preferências
   applyPrefs(now); markSettings(now); flush(now, true);
   event("preferências redefinidas");
@@ -1240,11 +1406,22 @@ void App::resetPreferences(ms_t now) {
 void App::eraseAll(ms_t now) {
   plat_.storageErase(BlobKind::Settings); plat_.storageErase(BlobKind::Progress); plat_.storageErase(BlobKind::Checkpoint);
   plat_.wifiForget();
-  defaultSettings(set_); defaultProgress(prog_); tbMemset(&ckpt_, 0, sizeof ckpt_);
+  defaultSettings(set_); applyFactoryDefaults(fac_, set_); defaultProgress(prog_); tbMemset(&ckpt_, 0, sizeof ckpt_);
   setDirty_ = progDirty_ = ckptDirty_ = false;
   applyPrefs(now);
   event("tudo apagado");
   plat_.requestReboot();
+}
+
+// "Restaurar padrão de fábrica": apaga preferências, progresso, sessão e Wi-Fi.
+// O perfil de fábrica (modelo, cor, padrões) fica intacto, então a unidade
+// reinicia exatamente como saiu da bancada.
+void App::factoryReset(ms_t now) {
+  event("restaurar padrão de fábrica");
+  eraseAll(now);
+  applyFactoryDefaults(fac_, set_);
+  applyPrefs(now);
+  applyTheme();
 }
 
 bool App::otaAllowed(const char** reason) const {

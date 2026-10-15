@@ -30,7 +30,9 @@ static Canvas& cv() {
 }
 
 // ── Harness ─────────────────────────────────────────────────────────────────
-static HwCaps fullCaps() { HwCaps c; c.motor = true; return c; }
+// Núcleo testado com TODOS os sensores (a lógica de IMU/RTC/motor continua no núcleo,
+// mesmo que a ES3C28P não tenha esses componentes).
+static HwCaps fullCaps() { HwCaps c; c.motor = true; c.imu = true; c.rtc = true; c.battery = true; c.mic = true; return c; }
 
 struct H {
   FakePlatform plat;
@@ -39,6 +41,7 @@ struct H {
   HwCaps caps;
   ms_t t = 0;
   H(HwCaps c = fullCaps(), bool setupDone = true, uint32_t seed = 42) : fb(SCR_W * SCR_H), caps(c) {
+    plat.setFactory(Model::Pro, 3, 0);  // unidade padrão dos testes: Pro, grafite, tema escuro
     if (setupDone) preset([](Settings& s) { s.setupDone = 1; });
     start(seed);
   }
@@ -52,23 +55,25 @@ struct H {
   void reboot() { app->flush(t, true); delete app; t += 5000; start(7); }
   void tick() { if (app->tick(t)) app->framePresented(t); }
   void run(ms_t ms, ms_t step = 10) { ms_t end = t + ms; while (t < end) { t += step; if (t > end) t = end; tick(); } }
-  void down(int x = 233, int y = 233) { app->touchSample(true, x, y, t); }
-  void up(int x = 233, int y = 233) { app->touchSample(false, x, y, t); }
-  void hold(ms_t ms, int x = 233, int y = 233, ms_t step = 10) { down(x, y); ms_t end = t + ms; while (t < end) { t += step; down(x, y); tick(); } up(x, y); }
-  void tap(int x = 233, int y = 233) { hold(70, x, y); run(400); }
-  void dbl(int x = 233, int y = 233) { hold(60, x, y); run(80); hold(60, x, y); run(450); }
+  void down(int x = SCR_CX, int y = SCR_CY) { app->touchSample(true, x, y, t); }
+  void up(int x = SCR_CX, int y = SCR_CY) { app->touchSample(false, x, y, t); }
+  void hold(ms_t ms, int x = SCR_CX, int y = SCR_CY, ms_t step = 10) { down(x, y); ms_t end = t + ms; while (t < end) { t += step; down(x, y); tick(); } up(x, y); }
+  void tap(int x = SCR_CX, int y = SCR_CY) { hold(70, x, y); run(400); }
+  void dbl(int x = SCR_CX, int y = SCR_CY) { hold(60, x, y); run(80); hold(60, x, y); run(450); }
   void swipe(int dx, int dy) {
-    int x0 = 233 - dx / 2, y0 = 233 - dy / 2;
+    int x0 = SCR_CX - dx / 2, y0 = SCR_CY - dy / 2;
     down(x0, y0); run(10);
     for (int i = 1; i <= 6; i++) { t += 25; down(x0 + dx * i / 6, y0 + dy * i / 6); tick(); }
     up(x0 + dx, y0 + dy); run(150);
   }
   void stroke(ms_t ms) {  // carinho: vai e volta devagar
-    down(150, 233); run(10);
-    for (ms_t e = 0; e < ms; e += 20) { int x = 150 + (int)((e / 20) % 20) * 8; if ((e / 400) % 2) x = 310 - (int)((e / 20) % 20) * 8; t += 20; down(x, 233); tick(); }
+    down(80, SCR_CY); run(10);
+    for (ms_t e = 0; e < ms; e += 20) { int x = 80 + (int)((e / 20) % 20) * 8; if ((e / 400) % 2) x = 240 - (int)((e / 20) % 20) * 8; t += 20; down(x, SCR_CY); tick(); }
     up(); run(300);
   }
   bool press(int id) { tick(); int x, y; if (!app->buttonPos(id, x, y)) return false; tap(x, y); return true; }
+  // Abre um app pelo menu: menu principal ou, se não estiver lá, "Mais apps".
+  bool openApp(int id) { swipe(0, -200); if (pick(id)) return true; if (!pick(L_MORE)) return false; return pick(id); }
   bool pick(int id) { tick(); int x, y; if (!app->listItemPos(id, x, y)) return false; run(50); tap(x, y); return true; }
   void skipIntro() { run(3000, 20); }
 };
@@ -89,8 +94,9 @@ TEST(gfx_antialias_dirty_and_text) {
   c.beginFrame(0);
   c.fillCircle(100.f, 100.f, 20.f, 0xFF0000);
   CHECK_EQ(c.get(100, 100), to565(0xFF0000));
-  uint16_t edge = c.get(100, 80);  // borda: mistura parcial (antialias)
-  CHECK(edge != 0 && edge != to565(0xFF0000));
+  int partial = 0;  // borda: mistura parcial (antialias)
+  for (int y = 80; y < 100; y++) for (int x = 100; x < 121; x++) { uint16_t e = c.get(x, y); if (e != 0 && e != to565(0xFF0000)) partial++; }
+  CHECK(partial > 5);
   CHECK_EQ(c.get(100, 75), 0);
   IRect d = c.endFrame();
   CHECK(d.x0 % 2 == 0 && d.y0 % 2 == 0 && d.w() % 2 == 0 && d.h() % 2 == 0);  // CO5300 exige pares
@@ -224,7 +230,7 @@ TEST(synth_render_volume_and_babble) {
 struct TC { TouchClassifier g; ms_t t = 0; std::vector<TouchEvent> ev;
   void run(ms_t ms) { for (ms_t e = t + ms; t < e;) { t += 5; TouchEvent b[16]; int n = g.poll(t, b, 16); for (int i = 0; i < n; i++) ev.push_back(b[i]); } }
   void press(ms_t ms, int x = 200, int y = 200) { g.sample(true, x, y, t); for (ms_t e = t + ms; t < e;) { t += 5; g.sample(true, x, y, t); TouchEvent b[16]; int n = g.poll(t, b, 16); for (int i = 0; i < n; i++) ev.push_back(b[i]); } g.sample(false, x, y, t); }
-  void drag(int dx, int dy, ms_t ms) { int x = 233, y = 233; g.sample(true, x, y, t); int steps = (int)(ms / 10); for (int i = 1; i <= steps; i++) { t += 10; g.sample(true, x + dx * i / steps, y + dy * i / steps, t); TouchEvent b[16]; int n = g.poll(t, b, 16); for (int k = 0; k < n; k++) ev.push_back(b[k]); } g.sample(false, x + dx, y + dy, t); }
+  void drag(int dx, int dy, ms_t ms) { int x = SCR_CX, y = SCR_CY; g.sample(true, x, y, t); int steps = (int)(ms / 10); for (int i = 1; i <= steps; i++) { t += 10; g.sample(true, x + dx * i / steps, y + dy * i / steps, t); TouchEvent b[16]; int n = g.poll(t, b, 16); for (int k = 0; k < n; k++) ev.push_back(b[k]); } g.sample(false, x + dx, y + dy, t); }
   std::vector<TouchEv> classified() const { std::vector<TouchEv> v; for (auto& e : ev) if (e.type != TouchEv::Down && e.type != TouchEv::Move && e.type != TouchEv::Up) v.push_back(e.type); return v; }
 };
 
@@ -335,7 +341,7 @@ TEST(home_carousel_launcher_and_quick_panel) {
   CHECK(h.press(B_Q_SILENT)); CHECK(h.app->settings().silent == 1);
   // arrastar o controle de volume
   h.tick(); int x, y; CHECK(h.app->buttonPos(B_Q_VOL, x, y));
-  h.down(110, y); h.run(20); for (int k = 0; k <= 10; k++) { h.t += 20; h.down(110 + k * 25, y); h.tick(); } h.up(360, y); h.run(100);
+  h.down(50, y); h.run(20); for (int k = 0; k <= 10; k++) { h.t += 20; h.down(50 + k * 25, y); h.tick(); } h.up(300, y); h.run(100);
   CHECK(h.app->settings().volume >= 95);
   h.swipe(0, -200); CHECK(h.app->screen() == Screen::Face);
   h.reboot(); CHECK_EQ(h.app->settings().silent, 1); CHECK(h.app->settings().volume >= 95);
@@ -345,14 +351,15 @@ TEST(list_drag_scroll_and_pick) {
   H h; h.skipIntro();
   h.swipe(0, -200);
   CHECK(h.app->screen() == Screen::Launcher);
-  // arrasta a lista para cima devagar (sem deslize) e solta: encaixa num item
-  h.down(233, 380); h.run(10);
-  for (int k = 1; k <= 30; k++) { h.t += 30; h.down(233, 380 - k * 8); h.tick(); }
-  h.up(233, 140); h.run(1200);
-  CHECK(h.app->screen() == Screen::Launcher);
-  h.tap(233, 233);  // abre o item centralizado
-  CHECK(h.app->screen() != Screen::Launcher);
-  CHECK(h.app->screen() != Screen::Face);
+  CHECK(h.pick(L_SYSTEM)); CHECK(h.app->screen() == Screen::System);
+  // arrasta a lista para cima devagar (sem deslize) e solta: não abre nada, só rola
+  h.down(SCR_CX, 220); h.run(10);
+  for (int k = 1; k <= 20; k++) { h.t += 30; h.down(SCR_CX, 220 - k * 6); h.tick(); }
+  h.up(SCR_CX, 100); h.run(1200);
+  CHECK(h.app->screen() == Screen::System);
+  // o último item (restaurar fábrica) fica alcançável e abre a confirmação
+  CHECK(h.pick(S_FACTORY_RESET)); CHECK(h.app->screen() == Screen::Confirm);
+  CHECK(h.press(B_CANCEL)); CHECK(h.app->screen() == Screen::System);
 }
 
 // ════════ 6. Sensores ════════
@@ -695,7 +702,7 @@ TEST(dive_game_rules_and_fairness) {
       const DiveGame::Item* it = g.items();
       int target = -1, bestY = -1;
       for (int k = 0; k < DiveGame::kMaxItems; k++) if (it[k].active && !it[k].jelly && it[k].y > bestY) { bestY = it[k].y; target = it[k].x; }
-      int touchX = target >= 0 ? DiveGame::kViewX0 + target * DiveGame::kViewScale / 1000 : -1;
+      int touchX = target >= 0 ? DiveGame::kViewX0 + (int)((int64_t)target * DiveGame::kViewScaleMilli / 1000000) : -1;
       for (int k = 0; k < DiveGame::kMaxItems; k++) for (int j = k + 1; j < DiveGame::kMaxItems; j++)
         if (it[k].active && it[j].active && it[k].jelly && it[j].jelly && std::abs(it[k].y - it[j].y) < 4000 && std::abs(it[k].x - it[j].x) < 20000) jellyPairsTooClose++;
       g.setControl(0, touchX);
@@ -746,7 +753,7 @@ TEST(timing_press_held_through_go_does_not_stop) {
 
 TEST(game_exit_by_hold_and_menu) {
   H h; h.skipIntro();
-  h.swipe(0, -200); CHECK(h.pick(L_GAMES)); CHECK(h.app->screen() == Screen::GamesMenu);
+  CHECK(h.openApp(L_GAMES)); CHECK(h.app->screen() == Screen::GamesMenu);
   CHECK(h.pick(L_GAME0 + (int)GameId::Dive)); CHECK(h.app->screen() == Screen::Game);
   CHECK(h.app->activeGameId() == GameId::Dive);
   h.tap(); h.run(2000);
@@ -789,7 +796,7 @@ TEST(timers_pomodoro_offscreen_pause_single_completion) {
 
 TEST(timer_screen_buttons_and_presets) {
   H h; h.skipIntro();
-  h.swipe(0, -200); CHECK(h.pick(L_TIMERS));
+  CHECK(h.openApp(L_TIMERS));
   CHECK(h.press(B_TIMER_SEL2));
   CHECK(h.press(B_TIMER_DUR)); CHECK(h.app->screen() == Screen::TimerSet);
   CHECK(h.pick(L_PRESET0 + 0));  // 1 min
@@ -833,7 +840,7 @@ TEST(stopwatch_counts_up_laps_no_alarm) {
   s.pause(2000); CHECK_EQ(s.elapsedMs(9000), 2000);
   s.resume(9000); CHECK_EQ(s.elapsedMs(10000), 3000);
   H h; h.skipIntro();
-  h.swipe(0, -200); CHECK(h.pick(L_SW));
+  CHECK(h.openApp(L_SW));
   CHECK(h.press(B_PLAY)); h.run(3000);
   CHECK(h.press(B_LAP));
   h.run(120000, 100);
@@ -894,7 +901,7 @@ TEST(alarms_fire_once_days_and_no_retroactive) {
 
 TEST(alarm_edit_screen) {
   H h; h.skipIntro();
-  h.swipe(0, -200); CHECK(h.pick(L_ALARMS));
+  CHECK(h.openApp(L_ALARMS));
   CHECK(h.press(B_ALARM_OPEN0 + 1)); CHECK(h.app->screen() == Screen::AlarmEdit);
   uint8_t hr = h.app->settings().alarms[1].hour;
   CHECK(h.press(B_AL_H_PLUS)); CHECK_EQ(h.app->settings().alarms[1].hour, (hr + 1) % 24);
@@ -908,7 +915,7 @@ TEST(alarm_edit_screen) {
 TEST(breath_session_unlocks_zen) {
   H h; h.skipIntro();
   for (int k = 0; k < 3; k++) {
-    h.swipe(0, -200); CHECK(h.pick(L_BREATH));
+    CHECK(h.openApp(L_BREATH));
     CHECK(h.app->screen() == Screen::Breath);
     CHECK(h.press(B_BREATH_PLAY));
     h.run(66000, 50);
@@ -920,7 +927,7 @@ TEST(breath_session_unlocks_zen) {
 
 TEST(dice_modes_and_shake_roll) {
   H h; h.skipIntro();
-  h.swipe(0, -200); CHECK(h.pick(L_DICE));
+  CHECK(h.openApp(L_DICE));
   for (int i = 0; i < 20; i++) { h.tap(); h.run(800); }
   CHECK(h.app->screen() == Screen::Dice);
   CHECK(h.press(B_DICE_MODE));
@@ -966,18 +973,27 @@ TEST(weather_url_parse_and_failures) {
 
 TEST(settings_on_device_cycle_and_persist) {
   H h; h.skipIntro();
-  h.swipe(0, -200); CHECK(h.pick(L_SETTINGS));
-  uint8_t eye = h.app->settings().eyeColor;
-  CHECK(h.pick(S_EYE)); CHECK_EQ(h.app->settings().eyeColor, (eye + 1) % EYE_COLOR_COUNT);
-  CHECK(h.app->screen() == Screen::Settings);
+  CHECK(h.openApp(L_LOOK)); CHECK(h.app->screen() == Screen::Appearance);
+  CHECK_EQ(h.app->settings().theme, 0);
+  CHECK(h.pick(S_THEME)); CHECK_EQ(h.app->settings().theme, 1);   // tema claro
+  CHECK(h.app->canvas().get(2, 230) == to565(0xFFFFFF));            // fundo branco
+  CHECK(h.pick(S_EYE)); CHECK(h.app->screen() == Screen::ColorPick);
+  CHECK(h.press(B_COLOR0 + 1)); CHECK_EQ(h.app->settings().eyeColor, 1);  // azul
+  CHECK(h.press(B_BACK)); CHECK(h.app->screen() == Screen::Appearance);
   CHECK(h.pick(S_FACE)); CHECK_EQ(h.app->settings().watchFace, 1);
-  CHECK(h.pick(S_VOLUME));
-  CHECK(h.pick(S_NET)); CHECK(h.app->screen() == Screen::Config); CHECK(h.plat.apActive);
-  CHECK(h.press(B_CFG_CLOSE)); CHECK(!h.plat.apActive);
+  CHECK(h.pick(S_OVERLAYS)); CHECK(h.app->screen() == Screen::Overlays);
+  CHECK(h.pick(S_SHOW_CLOCK)); CHECK_EQ(h.app->settings().showClock, 1);
+  CHECK(h.app->listIndexOf(S_SHOW_BATT) >= 0);                            // Pro: opção de bateria existe
+  h.press(B_BACK); h.press(B_BACK);
+  CHECK(h.app->screen() == Screen::Launcher);
+  CHECK(h.pick(L_WIFI)); CHECK(h.pick(S_WIFI_SETUP)); CHECK(h.app->screen() == Screen::Config); CHECK(h.plat.apActive);
+  CHECK(h.press(B_CFG_CLOSE)); CHECK(!h.plat.apActive); CHECK(h.app->screen() == Screen::Wifi);
   h.run(5000);
   h.reboot();
-  CHECK_EQ(h.app->settings().eyeColor, (eye + 1) % EYE_COLOR_COUNT);
+  CHECK_EQ(h.app->settings().eyeColor, 1);
+  CHECK_EQ(h.app->settings().theme, 1);
   CHECK_EQ(h.app->settings().watchFace, 1);
+  CHECK_EQ(h.app->settings().showClock, 1);
 }
 
 // ════════ 9. Persistência ════════
@@ -994,7 +1010,7 @@ TEST(persistence_survives_reboot_and_resets) {
   h.reboot();
   CHECK(strcmp(h.app->settings().nickname, "Tubarão") == 0);
   CHECK_EQ(h.app->settings().personality, 1);
-  CHECK_EQ(h.app->settings().eyeColor, eyeColorFromKey("lilas"));
+  CHECK_EQ(h.app->settings().eyeColor, exprColorFromKey("lilas"));
   CHECK(h.app->progress().unlocked & 1);
   CHECK_EQ(apiCall(*h.app, "POST", "/api/reset", "{\"scope\":\"wifi\",\"confirm\":\"ESQUECER\"}", r, h.t), 200);
   CHECK(!h.plat.staConfigured);
@@ -1091,11 +1107,11 @@ TEST(api_status_frame_options_collection) {
   H h; h.skipIntro();
   std::string r;
   CHECK_EQ(apiCall(*h.app, "GET", "/api/status", nullptr, r, h.t), 200);
-  for (const char* k : {"\"caps\"", "\"motion\"", "\"sound\"", "\"power\"", "\"weather\"", "\"nextAlarm\"", "\"version\":\"2.0.0\""}) CHECK(r.find(k) != std::string::npos);
+  for (const char* k : {"\"caps\"", "\"motion\"", "\"sound\"", "\"power\"", "\"weather\"", "\"nextAlarm\"", "\"version\":\"" TB_VERSION "\""}) CHECK(r.find(k) != std::string::npos);
   CHECK_EQ(apiCall(*h.app, "GET", "/api/frame", nullptr, r, h.t), 200);
-  CHECK(r.find("\"w\":117") != std::string::npos);
+  CHECK(r.find("\"w\":160") != std::string::npos);
   size_t a = r.find("\"data\":\"") + 8, b = r.find('"', a);
-  CHECK_EQ(b - a, (117 * 234 + 2) / 3 * 4);
+  CHECK_EQ(b - a, (size_t)((320 + 2) / 3 * 4 * 120));
   CHECK_EQ(apiCall(*h.app, "GET", "/api/options", nullptr, r, h.t), 200);
   CHECK(r.find("\"sao_paulo\"") != std::string::npos && r.find("\"#3EE6FF\"") != std::string::npos);
   CHECK_EQ(apiCall(*h.app, "GET", "/api/collection", nullptr, r, h.t), 200);
@@ -1118,7 +1134,7 @@ TEST(dev_unlock_uses_separate_test_profile_and_radiant) {
   // Radiante: libera sozinho quando todas as outras foram conquistadas
   CHECK_EQ(apiCall(*h.app, "POST", "/api/restore", "{\"format\":\"tubabot-backup\",\"prefs\":{},\"progress\":{\"unlocked\":511}}", r, h.t), 200);
   h.stroke(1600); h.run(3000);
-  h.swipe(0, -200); h.pick(L_BREATH); h.press(B_BREATH_PLAY);  // qualquer conquista nova dispara a checagem
+  h.openApp(L_BREATH); h.press(B_BREATH_PLAY);  // qualquer conquista nova dispara a checagem
   CHECK((h.app->progress().unlocked & 511) == 511);
 }
 
@@ -1127,11 +1143,148 @@ TEST(menu_navigation_and_inactivity) {
   h.swipe(0, -200); CHECK(h.app->screen() == Screen::Launcher);
   h.run(31000, 50);
   CHECK(h.app->screen() == Screen::Face);  // listas voltam ao rosto
-  h.swipe(0, -200); CHECK(h.pick(L_EXPR)); CHECK(h.app->screen() == Screen::Expressions);
+  CHECK(h.openApp(L_EXPR)); CHECK(h.app->screen() == Screen::Expressions);
   h.swipe(-180, 0); h.swipe(-180, 0);
   CHECK(h.press(B_EXPR_USE)); CHECK(h.app->screen() == Screen::Face);
   CHECK(h.app->baseExpr() == Expr::Sad);  // terceira da coleção
-  h.swipe(0, -200); CHECK(h.pick(L_CLOCK)); CHECK(h.app->screen() == Screen::Clock);
+  CHECK(h.openApp(L_CLOCK)); CHECK(h.app->screen() == Screen::Clock);
+}
+
+// ════════ 12. v3: fábrica, Lite/Pro, tema, rosto em tela cheia ════════
+TEST(factory_profile_format_parse_and_crc) {
+  FactoryConfig f; f.model = Model::Pro; f.body = 0; f.exprColor = 0; f.theme = 0; f.volume = 70; f.showClock = 1;
+  tbStrlcpy(f.serial, "TB-2026-000123", sizeof f.serial);
+  char txt[FACTORY_MAX]; size_t n = formatFactory(f, txt, sizeof txt);
+  CHECK(n > 40);
+  CHECK(strncmp(txt, "TUBABOT-FABRICA 1\n", 18) == 0);
+  FactoryConfig g; const char* why = nullptr;
+  CHECK(parseFactory(txt, n, g, &why)); CHECK(why == nullptr);
+  CHECK(g.present); CHECK(g.model == Model::Pro); CHECK_EQ(g.body, 0); CHECK_EQ(g.exprColor, 0);
+  CHECK_EQ(g.volume, 70); CHECK_EQ(g.showClock, 1); CHECK(strcmp(g.serial, "TB-2026-000123") == 0);
+  // flash apagada depois do texto (0xFF) é aceita
+  char pad[FACTORY_MAX]; memset(pad, 0xFF, sizeof pad); memcpy(pad, txt, n);
+  CHECK(parseFactory(pad, sizeof pad, g));
+  // um byte alterado invalida o CRC
+  char bad[FACTORY_MAX]; memcpy(bad, txt, n); bad[20] = bad[20] == 'p' ? 'l' : 'p';
+  CHECK(!parseFactory(bad, n, g, &why)); CHECK(why != nullptr); CHECK(!g.present); CHECK(g.model == Model::Lite);
+  // ausente / lixo
+  CHECK(!parseFactory("", 0, g, &why)); CHECK(strcmp(why, "ausente") == 0);
+  CHECK(!parseFactory("oi", 2, g, &why));
+  // só a cor física: a expressão segue a cor; Lite nunca mostra bateria; chave desconhecida é ignorada
+  const char* body = "TUBABOT-FABRICA 1\nmodelo=lite\ncor=azul\nmostrar_bateria=1\nfutura_chave=42\n";
+  char t2[256]; StrBuf sb(t2, sizeof t2); sb.put(body).put("crc=").hex(crc32((const uint8_t*)body, strlen(body)), 8).put('\n');
+  CHECK(parseFactory(t2, sb.len, g));
+  CHECK(g.model == Model::Lite); CHECK_EQ(g.body, 1); CHECK_EQ(g.exprColor, 1); CHECK_EQ(g.showBattery, 0);
+  CHECK_EQ(bodyFromKey("preto"), 3); CHECK_EQ(exprColorFromKey("grafite"), 3);
+}
+
+TEST(factory_defaults_first_boot_and_restore) {
+  H h(fullCaps(), false);
+  h.plat.setFactory(Model::Pro, 0, 1);  // vermelho, tema claro
+  h.preset([](Settings& s) { (void)s; });
+  h.plat.storageErase(BlobKind::Settings);
+  h.reboot();
+  CHECK(h.app->factory().present);
+  CHECK_EQ(h.app->settings().theme, 1);
+  CHECK_EQ(h.app->settings().eyeColor, 0);
+  CHECK(h.app->caps().battery);
+  // o usuário personaliza
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"theme\":\"escuro\",\"eyeColor\":\"verde\",\"setupDone\":true,\"nickname\":\"Rubi\"}", r, h.t), 200);
+  h.run(5000); h.reboot();
+  CHECK_EQ(h.app->settings().theme, 0);
+  CHECK_EQ(h.app->settings().eyeColor, exprColorFromKey("verde"));
+  // modelo/cor física não são preferências: não mudam pela API
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"model\":\"lite\"}", r, h.t), 200);
+  CHECK(h.app->factory().model == Model::Pro);
+  // restaurar padrão de fábrica pelo menu Sistema
+  h.run(4000);
+  CHECK(h.openApp(L_SYSTEM)); CHECK(h.pick(S_FACTORY_RESET)); CHECK(h.app->screen() == Screen::Confirm);
+  CHECK(h.press(B_OK));
+  CHECK_EQ(h.plat.reboots, 1);
+  h.reboot();
+  CHECK_EQ(h.app->settings().theme, 1);
+  CHECK_EQ(h.app->settings().eyeColor, 0);
+  CHECK_EQ(h.app->settings().nickname[0], 0);
+  CHECK_EQ(h.app->settings().setupDone, 0);
+  CHECK(h.app->factory().present);  // o perfil de fábrica continua lá
+}
+
+TEST(lite_hides_battery_everywhere) {
+  H h;
+  h.plat.setFactory(Model::Lite, 2, 0);  // branco, escuro
+  h.reboot(); h.skipIntro();
+  CHECK(!h.app->caps().battery);
+  PowerState p; p.known = true; p.battery = true; p.percent = 5; p.charging = false; p.mv = 3400;
+  h.app->powerUpdate(p, h.t); h.run(500);
+  CHECK(!h.app->power().known);
+  CHECK(h.app->screen() == Screen::Face);   // nenhum aviso de bateria fraca
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "GET", "/api/status", nullptr, r, h.t), 200);
+  CHECK(r.find("\"applicable\":false") != std::string::npos);
+  CHECK(r.find("\"model\":\"lite\"") != std::string::npos);
+  CHECK_EQ(apiCall(*h.app, "GET", "/api/prefs", nullptr, r, h.t), 200);
+  CHECK(r.find("showBattery") == std::string::npos);
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"showBattery\":true}", r, h.t), 200);
+  CHECK_EQ(h.app->settings().showBattery, 0);
+  CHECK(h.openApp(L_LOOK)); CHECK(h.pick(S_OVERLAYS));
+  CHECK(h.app->listIndexOf(S_SHOW_CLOCK) >= 0);
+  CHECK_EQ(h.app->listIndexOf(S_SHOW_BATT), -1);   // a opção nem aparece
+}
+
+TEST(missing_factory_profile_is_safe) {
+  H h;
+  h.plat.factoryLen = 0;
+  h.reboot(); h.skipIntro();
+  CHECK(!h.app->factory().present);
+  CHECK(h.app->factory().model == Model::Lite);
+  CHECK(!h.app->caps().battery);
+  CHECK(h.app->screen() == Screen::Face);
+}
+
+TEST(face_fullscreen_dock_and_overlays) {
+  H h; h.skipIntro(); h.run(4000);
+  CHECK(h.app->screen() == Screen::Face);
+  CHECK(!h.app->dockVisible(h.t));
+  // rosto limpo: faixa superior vazia (sem barra de status)
+  auto topInk = [&]() { int n = 0; for (int y = 4; y < 30; y++) for (int x = 0; x < SCR_W; x++) if (h.app->canvas().get(x, y) != to565(ui::BG)) n++; return n; };
+  int ink0 = topInk();
+  CHECK(ink0 < 60);   // no máximo um brilho da expressão encostando no topo
+  std::string r;
+  apiCall(*h.app, "POST", "/api/time", "{\"epoch\":1792069500}", r, h.t);
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"showClock\":true}", r, h.t), 200);
+  h.run(300);
+  CHECK(topInk() > ink0 + 40);   // hora discreta no topo
+  apiCall(*h.app, "POST", "/api/prefs", "{\"showClock\":false}", r, h.t);
+  // tocar no rosto: reage e mostra os controles, que somem sozinhos
+  h.tap(120, 120);
+  CHECK(h.app->dockVisible(h.t));
+  h.run(5000);
+  CHECK(!h.app->dockVisible(h.t));
+  h.tap(120, 120); h.run(300);
+  CHECK(h.press(B_DOCK_MENU)); CHECK(h.app->screen() == Screen::Launcher);
+  h.press(B_BACK); h.tap(120, 120); h.run(300);
+  CHECK(h.press(B_DOCK_POMO)); CHECK(h.app->screen() == Screen::Pomodoro);
+}
+
+TEST(theme_switch_repaints_and_inactivity_returns_to_face) {
+  H h; h.skipIntro(); h.run(500);
+  CHECK(h.app->canvas().get(1, 1) == to565(0x000000));
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"theme\":\"claro\"}", r, h.t), 200);
+  h.run(200);
+  CHECK(h.app->canvas().get(1, 1) == to565(0xFFFFFF));
+  CHECK(h.app->canvas().get(SCR_W - 2, SCR_H - 2) == to565(0xFFFFFF));
+  // Pomodoro rodando: a tela volta ao rosto sozinha, o Pomodoro continua
+  CHECK(h.openApp(L_POMO)); CHECK(h.press(B_PLAY));
+  h.run(46000, 50);
+  CHECK(h.app->screen() == Screen::Face);
+  CHECK(h.app->pomodoro().state() == RunState::Running);
+  // botão BOOT no rosto apaga a tela; de novo acende
+  h.app->hwButton(HwButton::Boot, false, h.t); h.run(100);
+  CHECK(h.app->screen() == Screen::ScreenOff);
+  h.app->hwButton(HwButton::Boot, false, h.t); h.run(100);
+  CHECK(h.app->screen() == Screen::Face);
 }
 
 int main(int argc, char** argv) {

@@ -54,7 +54,10 @@ void App::writePrefs(JsonOut& j) {
   j.kbool("weatherEnabled", set_.weatherEnabled);
   j.kbool("ntpEnabled", set_.ntpEnabled);
   j.kint("volume", set_.volume);
-  j.kstr("eyeColor", EYE_COLORS[set_.eyeColor].key);
+  j.kstr("eyeColor", EXPR_COLORS[set_.eyeColor].key);
+  j.kstr("theme", set_.theme ? "claro" : "escuro");
+  j.kbool("showClock", set_.showClock); j.kbool("showWeather", set_.showWeather);
+  if (caps_.battery) j.kbool("showBattery", set_.showBattery);
   j.kbool("eyeGlow", set_.eyeGlow);
   j.kint("watchFace", set_.watchFace);
   j.kbool("imuReactions", set_.imuReactions); j.kbool("micReactions", set_.micReactions); j.kbool("tiltLook", set_.tiltLook);
@@ -182,7 +185,14 @@ int App::applyPrefsJson(const JsonVal& v, JsonOut& err, int& errCount, ms_t now,
   getBool(v, "setupDone", s.setupDone);
   if (getInt(v, "volume", 0, 100, n)) s.volume = (uint8_t)n;
   x = v.get("eyeColor");
-  if (x.ok()) { char k[16]; int idx = x.asString(k, sizeof k) ? eyeColorFromKey(k) : -1; if (idx < 0) fail("eyeColor", "cor desconhecida"); else s.eyeColor = (uint8_t)idx; }
+  if (x.ok()) { char k[16]; int idx = x.asString(k, sizeof k) ? exprColorFromKey(k) : -1; if (idx < 0) fail("eyeColor", "cor desconhecida"); else s.eyeColor = (uint8_t)idx; }
+  x = v.get("theme");
+  if (x.ok()) {
+    char k[12] = {0}; x.asString(k, sizeof k);
+    if (tbStreq(k, "escuro")) s.theme = 0; else if (tbStreq(k, "claro")) s.theme = 1; else fail("theme", "use escuro ou claro");
+  }
+  getBool(v, "showClock", s.showClock); getBool(v, "showWeather", s.showWeather);
+  if (caps_.battery) getBool(v, "showBattery", s.showBattery);
   getBool(v, "eyeGlow", s.eyeGlow);
   if (getInt(v, "watchFace", 0, WATCHFACE_COUNT - 1, n)) s.watchFace = (uint8_t)n;
   getBool(v, "imuReactions", s.imuReactions); getBool(v, "micReactions", s.micReactions); getBool(v, "tiltLook", s.tiltLook);
@@ -237,7 +247,7 @@ int App::applyPrefsJson(const JsonVal& v, JsonOut& err, int& errCount, ms_t now,
 int App::apiStatus(JsonOut& j, ms_t now) {
   j.kbool("ok", true);
   j.kstr("model", "v2");
-  j.kstr("modelName", "TubaBot v2");
+  j.kstr("modelName", fac_.model == Model::Pro ? "TubaBot Pro" : "TubaBot Lite");
   j.kstr("version", TB_VERSION);
   j.kstr("nickname", set_.nickname);
   j.kstr("personality", set_.personality ? "brincalhao" : "tranquilo");
@@ -262,6 +272,11 @@ int App::apiStatus(JsonOut& j, ms_t now) {
       .kint("apSecondsLeft", ns.apSecondsLeft).kbool("homeConfigured", ns.staConfigured)
       .kstr("home", ns.sta == StaState::Connected ? "connected" : ns.sta == StaState::Connecting ? "connecting" : ns.sta == StaState::Failed ? "failed" : "off")
       .kstr("homeSsid", ns.staSsid).kstr("homeIp", ns.staIp).endObj();
+  j.beginObj("factory").kbool("present", fac_.present).kstr("model", fac_.model == Model::Pro ? "pro" : "lite")
+      .kstr("body", BODIES[fac_.body].key).kstr("bodyName", BODIES[fac_.body].name)
+      .kstr("exprColor", EXPR_COLORS[fac_.exprColor].key).kstr("theme", fac_.theme ? "claro" : "escuro")
+      .kstr("serial", fac_.serial).kstr("issue", facWhy_ ? facWhy_ : "").endObj();
+  j.beginObj("display").kint("w", SCR_W).kint("h", SCR_H).kstr("orientation", "landscape").kstr("theme", set_.theme ? "claro" : "escuro").endObj();
   j.beginObj("caps").kbool("speaker", caps_.speaker).kbool("motor", caps_.motor).kbool("imu", caps_.imu).kbool("mic", caps_.mic)
       .kbool("battery", caps_.battery).kbool("rtc", caps_.rtc).endObj();
   j.beginObj("outputs").kbool("soundAllowed", AlertPolicy::soundAllowed(caps_, out_.prefs()))
@@ -283,8 +298,10 @@ int App::apiStatus(JsonOut& j, ms_t now) {
       .kint("tiltX", motion_.tiltX()).kint("tiltY", motion_.tiltY()).endObj();
   j.beginObj("sound").kbool("active", sound_.active()).kint("level", sound_.level()).kint("baseline", sound_.baseline())
       .kbool("music", sound_.music()).endObj();
-  j.beginObj("power").kbool("known", power_.known).kbool("battery", power_.battery).kint("percent", power_.percent)
-      .kbool("charging", power_.charging).kbool("usb", power_.usb).kint("mv", power_.mv).endObj();
+  if (caps_.battery)
+    j.beginObj("power").kbool("applicable", true).kbool("known", power_.known).kbool("battery", power_.battery).kint("percent", power_.percent)
+        .kbool("charging", power_.charging).kbool("usb", power_.usb).kint("mv", power_.mv).endObj();
+  else j.beginObj("power").kbool("applicable", false).kbool("known", false).endObj();  // TubaBot Lite
   j.beginObj("weather").kbool("enabled", set_.weatherEnabled).kbool("valid", weather_.valid);
   if (weather_.valid) j.kint("tempC10", weather_.tempC10).kint("code", weather_.code).kstr("text", weatherText(weather_.code))
       .kint("hiC10", weather_.hiC10).kint("loC10", weather_.loC10).kint("humidity", weather_.humidity).kint("ageS", (int64_t)((now - weather_.updatedAt) / 1000));
@@ -388,14 +405,14 @@ int App::api(const char* method, const char* path, const char* body, size_t body
   }
   if (tbStreq(path, "/api/status") && isGet) { JsonOut j(out); j.beginObj(); int c = apiStatus(j, now); j.endObj(); return c; }
   if (tbStreq(path, "/api/frame") && isGet) {
-    // miniatura 1:4 (117×117, RGB565 little-endian) para o "espelho" do portal
-    static const int kStep = 4, kN = (SCR_W + kStep - 1) / kStep;
-    JsonOut j(out); j.beginObj().kint("w", kN).kint("h", kN).kstr("layout", "rgb565le").kint("step", kStep);
+    // miniatura 1:2 (160×120, RGB565 little-endian) para o "espelho" do portal
+    static const int kStep = 2, kW = SCR_W / kStep, kH = SCR_H / kStep;
+    JsonOut j(out); j.beginObj().kint("w", kW).kint("h", kH).kstr("layout", "rgb565le").kint("step", kStep);
     out.put(",\"data\":\"");
-    uint8_t row[kN * 2];
+    uint8_t row[kW * 2];
     const uint16_t* px = canvas_.pixels();
-    for (int y = 0; y < kN && !out.overflow; y++) {
-      for (int x = 0; x < kN; x++) { uint16_t v = px ? px[(y * kStep) * SCR_W + x * kStep] : 0; row[x * 2] = (uint8_t)v; row[x * 2 + 1] = (uint8_t)(v >> 8); }
+    for (int y = 0; y < kH && !out.overflow; y++) {
+      for (int x = 0; x < kW; x++) { uint16_t v = px ? px[(y * kStep) * SCR_W + x * kStep] : 0; row[x * 2] = (uint8_t)v; row[x * 2 + 1] = (uint8_t)(v >> 8); }
       b64(out, row, sizeof row);
     }
     out.put('"'); j.endObj();
@@ -447,9 +464,14 @@ int App::api(const char* method, const char* path, const char* body, size_t body
     JsonOut j(out); j.beginObj().kbool("ok", true).beginArr("cities");
     for (int i = 0; i < CITY_COUNT; i++) j.beginObj().kstr("key", CITY_TABLE[i].key).kstr("name", CITY_TABLE[i].name).endObj();
     j.endArr().beginArr("eyeColors");
-    for (int i = 0; i < EYE_COLOR_COUNT; i++) {
-      char hx[8]; StrBuf h(hx, sizeof hx); h.put('#').hex(EYE_COLORS[i].rgb, 6);
-      j.beginObj().kstr("key", EYE_COLORS[i].key).kstr("name", EYE_COLORS[i].name).kstr("hex", hx).endObj();
+    for (int i = 0; i < EXPR_COLOR_COUNT; i++) {
+      char hx[8], hl[8]; StrBuf h(hx, sizeof hx); h.put('#').hex(EXPR_COLORS[i].dark, 6); StrBuf l(hl, sizeof hl); l.put('#').hex(EXPR_COLORS[i].light, 6);
+      j.beginObj().kstr("key", EXPR_COLORS[i].key).kstr("name", EXPR_COLORS[i].name).kstr("hex", set_.theme ? hl : hx).kstr("dark", hx).kstr("light", hl).endObj();
+    }
+    j.endArr().beginArr("bodies");
+    for (int i = 0; i < BODY_COUNT; i++) {
+      char hx[8]; StrBuf h(hx, sizeof hx); h.put('#').hex(BODIES[i].rgb, 6);
+      j.beginObj().kstr("key", BODIES[i].key).kstr("name", BODIES[i].name).kstr("hex", hx).endObj();
     }
     j.endArr().endObj();
     return 200;
@@ -538,10 +560,10 @@ int App::api(const char* method, const char* path, const char* body, size_t body
     } else if (tbStreq(scope, "prefs")) {
       if (!tbStreq(confirm, "REDEFINIR")) return errorJson(out, 422, "confirme com REDEFINIR");
       resetPreferences(now);
-    } else if (tbStreq(scope, "all")) {
-      if (!tbStreq(confirm, "APAGAR TUDO")) return errorJson(out, 422, "confirme com APAGAR TUDO");
-      eraseAll(now);
-    } else return errorJson(out, 422, "escopo: wifi, prefs ou all");
+    } else if (tbStreq(scope, "all") || tbStreq(scope, "factory")) {
+      if (!tbStreq(confirm, "APAGAR TUDO") && !tbStreq(confirm, "FABRICA")) return errorJson(out, 422, "confirme com FABRICA");
+      factoryReset(now);
+    } else return errorJson(out, 422, "escopo: wifi, prefs ou factory");
     JsonOut j(out); j.beginObj().kbool("ok", true).kstr("scope", scope).endObj();
     return 200;
   }

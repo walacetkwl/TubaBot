@@ -1,6 +1,6 @@
 // TubaBot core — tipos básicos e utilitários.
 // O núcleo é C++17 "freestanding": sem STL, sem heap, sem exceções, sem RTTI.
-// Assim o MESMO código compila para o ESP32-C3 (Arduino), para testes nativos
+// Assim o MESMO código compila para o ESP32-S3 (Arduino), para testes nativos
 // (Mac/Linux) e para WebAssembly (simulador no navegador).
 #pragma once
 
@@ -10,7 +10,7 @@
 namespace tb {
 
 // Versão do firmware/núcleo (exibida no portal e em Informações).
-#define TB_VERSION "2.0.0"
+#define TB_VERSION "3.0.0"
 
 // Tempo monotônico em milissegundos (64 bits internos — sem rollover prático).
 typedef uint64_t ms_t;

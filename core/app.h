@@ -1,6 +1,6 @@
-// Máquina de estados do TubaBot v2. Recebe toque, movimento, nível sonoro,
-// energia e o relógio monotônico; produz a imagem 466×466 (com a área
-// alterada), o áudio sintetizado e o nível do motor de vibração.
+// Máquina de estados do TubaBot. Recebe toque, nível sonoro, energia e o
+// relógio monotônico; produz a imagem 240×320 (com a área alterada) e o áudio
+// sintetizado. O perfil de fábrica (Lite/Pro, cor, padrões) chega pela Platform.
 // É o MESMO código no firmware, nos testes e no simulador (WebAssembly).
 #pragma once
 #include "gfx.h"
@@ -14,6 +14,7 @@
 #include "json.h"
 #include "ui.h"
 #include "qr.h"
+#include "factory.h"
 
 namespace tb {
 
@@ -55,12 +56,15 @@ class Platform {
   virtual void setTimezone(const char* posix) = 0;
   virtual bool busy() = 0;  // gravação/OTA em andamento
   virtual void log(const char* msg) = 0;
-  virtual void rtcWrite(int64_t epoch) { (void)epoch; }  // relógio com bateria (PCF85063)
+  virtual void rtcWrite(int64_t epoch) { (void)epoch; }  // relógio com bateria (se houver)
+  // Perfil de fábrica (texto, ver factory.h). false = não gravado.
+  virtual bool factoryLoad(char* buf, size_t cap, size_t* len) { (void)buf; (void)cap; *len = 0; return false; }
 };
 
 enum class Screen : uint8_t {
-  Intro, FirstUse, Face, Clock, Today, Launcher, Quick, Pomodoro, Timers, TimerSet, Stopwatch, Alarms, AlarmEdit,
-  GamesMenu, Game, Expressions, Breath, Level, Dice, Weather, Stats, Settings, Config, Info, Torch,
+  Intro, FirstUse, Face, Clock, Today, Launcher, MoreApps, Quick, Pomodoro, Timers, TimerSet, Stopwatch, Alarms, AlarmEdit,
+  GamesMenu, Game, Expressions, Breath, Level, Dice, Weather, Stats,
+  Appearance, ColorPick, Overlays, Volume, Brightness, Wifi, System, Config, Info, Torch,
   Confirm, RecoveryConfirm, Resume, ScreenOff, Ota, Count
 };
 const char* screenName(Screen s);
@@ -97,7 +101,7 @@ class App {
 
   explicit App(Platform& p) : plat_(p) {}
 
-  // O buffer de imagem (466×466 RGB565) vem da plataforma (PSRAM no ESP32).
+  // O buffer de imagem (240×320 RGB565) vem da plataforma.
   void attachFramebuffer(uint16_t* px) { canvas_.attach(px, SCR_W, SCR_H); }
   // Inicialização: carrega preferências ANTES de qualquer saída.
   void begin(const HwCaps& caps, ms_t now, uint32_t seed, bool devBuild = false);
@@ -128,6 +132,10 @@ class App {
   const Canvas& canvas() const { return canvas_; }
   Screen screen() const { return screen_; }
   const HwCaps& caps() const { return caps_; }
+  const FactoryConfig& factory() const { return fac_; }
+  const char* factoryIssue() const { return facWhy_; }
+  bool lightTheme() const { return set_.theme != 0; }
+  bool dockVisible(ms_t now) const { return screen_ == Screen::Face && now < dockUntil_; }
   const Settings& settings() const { return set_; }
   const Progress& progress() const { return testMode_ ? progTest_ : prog_; }
   OutputManager& outputs() { return out_; }
@@ -143,6 +151,7 @@ class App {
   void forgetWifi();
   void resetPreferences(ms_t now);
   void eraseAll(ms_t now);
+  void factoryReset(ms_t now);   // volta aos padrões de fábrica DESTA unidade (apaga dados do usuário)
   bool otaAllowed(const char** reason) const;
   void enterOta(ms_t now);
   void otaProgress(int permille) { otaPermille_ = permille; forceFrame_ = true; }
@@ -228,6 +237,10 @@ class App {
   void rollDice(ms_t now);
   bool homeScreen(Screen s) const { return s == Screen::Face || s == Screen::Clock || s == Screen::Today; }
   bool listScreen(Screen s) const;
+  bool gridScreen(Screen s) const { return s == Screen::Launcher || s == Screen::MoreApps; }
+  void applyTheme();
+  void confirm(int action, ms_t now);
+  void setSlider(int id, int x, bool commit, ms_t now);
   int nextAlarmIndex(ms_t now, int* minutesAway) const;
   FaceStyle faceStyle() const;
   // desenho
@@ -236,27 +249,28 @@ class App {
   void hitRect(int id, float x, float y, float w, float h);
   void button(int id, float cx, float cy, float r, Color bg, Icon ic, Color fg);
   int hitTest(int x, int y) const;
-  void drawStatusBar(ms_t now, bool withTime);
+  void drawFaceOverlays(ms_t now);
+  void drawDock(ms_t now);
   void drawFaceScreen(ms_t now);
   void drawIntro(ms_t now);
   void drawClock(ms_t now);
   void drawToday(ms_t now);
-  void drawLauncher(ms_t now);
+  void drawGridScreen(const char* title, ms_t now);
+  void drawListScreen(const char* title, Color col, ms_t now);
+  void drawColorPick(ms_t now);
+  void drawLevelScreen(int which, ms_t now);
   void drawQuick(ms_t now);
   void drawPomodoro(ms_t now);
   void drawTimers(ms_t now);
-  void drawTimerSet(ms_t now);
   void drawStopwatch(ms_t now);
   void drawAlarms(ms_t now);
   void drawAlarmEdit(ms_t now);
-  void drawGamesMenu(ms_t now);
   void drawExpressions(ms_t now);
   void drawBreath(ms_t now);
   void drawLevel(ms_t now);
   void drawDice(ms_t now);
   void drawWeather(ms_t now);
   void drawStats(ms_t now);
-  void drawSettings(ms_t now);
   void drawConfigPages(bool firstUse, ms_t now);
   void drawInfo(ms_t now);
   void drawConfirm(ms_t now);
@@ -265,7 +279,7 @@ class App {
   void drawAlert(ms_t now);
   void drawHoldHint(ms_t now);
   void drawToast(ms_t now);
-  void drawBackChevron();
+  void drawBackChevron(const char* title = nullptr, Color col = 0);
   void drawQr(const char* text, float cx, float cy, float size);
   // API
   int apiStatus(JsonOut& j, ms_t now);
@@ -290,6 +304,8 @@ class App {
   TimeCheckpoint ckpt_;
   CivilClock clock_;
   bool clockFromRtc_ = false;
+  FactoryConfig fac_;
+  const char* facWhy_ = nullptr;
   Rng rng_;
   FaceRenderer face_;
   Pomodoro pomo_;
@@ -325,7 +341,7 @@ class App {
   int itemN_ = 0;
   int pressedItem_ = -1;
   bool listTouch_ = false;
-  int exprSel_ = 0, infoPage_ = 0, configPage_ = 0, quickDrag_ = -1, quickArm_ = -1;
+  int exprSel_ = 0, infoPage_ = 0, configPage_ = 0, quickDrag_ = -1, quickArm_ = -1;  // controle deslizante: armado no toque, arrastando
   int confirmAction_ = 0;
   // alertas
   Alert alerts_[kAlertQueue];
@@ -341,6 +357,7 @@ class App {
   bool lowBatWarned_ = false;
   ms_t wakeGuard_ = 0;
   bool suppressSwipe_ = false;
+  ms_t dockUntil_ = 0;          // controles sobre o rosto (aparecem ao tocar)
   // respiração / sorteio
   bool breathOn_ = false;
   uint8_t breathMode_ = 0;
@@ -361,6 +378,8 @@ class App {
   // brilho
   uint8_t appliedBright_ = 255;
   bool appliedRotate_ = false;
+  int appliedTheme_ = -1;
+  uint32_t appliedAccent_ = 0;
   // persistência
   bool setDirty_ = false, progDirty_ = false, ckptDirty_ = false;
   ms_t lastChange_ = 0, lastSave_ = 0;

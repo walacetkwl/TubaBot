@@ -387,7 +387,7 @@ void DiveGame::stepOnce() {
   // controle: dedo leva o Tuba até o ponto; inclinação dá a velocidade
   int32_t lim0 = kCatchDx * 1000, lim1 = (kW - kCatchDx) * 1000;
   if (touchX_ >= 0) {
-    int32_t target = (int32_t)((touchX_ - kViewX0) * 1000 / kViewScale);
+    int32_t target = (int32_t)((int64_t)(touchX_ - kViewX0) * 1000000 / kViewScaleMilli);
     int32_t maxStep = 160 * kStepMs;  // 160 px/s
     int32_t d = target - sharkX_;
     sharkX_ += tbClamp(d, -maxStep, maxStep);

@@ -14,7 +14,8 @@ static const int REMINDER_LABEL_BYTES = 16 * 2 + 1;  // até 16 caracteres (acen
 static const int TIMER_PRESET_COUNT = 6;
 static const int ALARM_COUNT = 3;
 static const int ALARM_LABEL_BYTES = 12 * 2 + 1;
-static const int EYE_COLOR_COUNT = 8;
+static const int EXPR_COLOR_COUNT = 10;
+static const int BODY_COUNT = 4;
 static const int WATCHFACE_COUNT = 3;
 
 enum class Personality : uint8_t { Tranquilo = 0, Brincalhao = 1 };
@@ -56,7 +57,7 @@ struct Settings {
   uint8_t ntpEnabled;
   // ── novo na v2 ──
   uint8_t volume;         // 0..100
-  uint8_t eyeColor;       // índice em EYE_COLORS
+  uint8_t eyeColor;       // cor das expressões: índice em EXPR_COLORS
   uint8_t eyeGlow;        // halo luminoso nos olhos
   uint8_t watchFace;      // 0 digital, 1 analógico, 2 "Tuba"
   uint8_t imuReactions;   // reagir a sacudir/pegar/virar
@@ -68,7 +69,12 @@ struct Settings {
   Alarm alarms[ALARM_COUNT];
   uint8_t weatherCity;    // índice em CITY_TABLE; 255 = coordenadas próprias
   int32_t weatherLatE4, weatherLonE4;  // graus × 10⁴ (cidade personalizada)
-  uint8_t reserved[16];
+  // ── novo na v3 (ES3C28P) ──
+  uint8_t theme;          // 0 escuro, 1 claro
+  uint8_t showClock;      // informações discretas sobre o rosto (todas desligadas de fábrica)
+  uint8_t showWeather;
+  uint8_t showBattery;    // só existe no modelo Pro
+  uint8_t reserved[12];
 };
 
 // Expressões que podem ser desbloqueadas (bits em Progress::unlocked).
@@ -122,9 +128,17 @@ extern const CityEntry CITY_TABLE[];
 extern const int CITY_COUNT;
 int cityIndexFromKey(const char* key);
 
-struct EyeColorEntry { const char* key; const char* name; uint32_t rgb; };
-extern const EyeColorEntry EYE_COLORS[EYE_COLOR_COUNT];
-int eyeColorFromKey(const char* key);
+// Cor das expressões: cada cor tem uma versão para o tema escuro e outra para o claro
+// (ex.: "Branco" vira cinza-azulado no fundo branco; "Grafite" clareia no fundo preto).
+struct ExprColorEntry { const char* key; const char* name; uint32_t dark, light; };
+extern const ExprColorEntry EXPR_COLORS[EXPR_COLOR_COUNT];
+int exprColorFromKey(const char* key);
+inline uint32_t exprColorRgb(int i, bool light) { const ExprColorEntry& e = EXPR_COLORS[(unsigned)i < (unsigned)EXPR_COLOR_COUNT ? i : 0]; return light ? e.light : e.dark; }
+
+// Variantes físicas (cor do corpo). Cada uma sugere a cor de expressão padrão.
+struct BodyEntry { const char* key; const char* name; uint32_t rgb; uint8_t exprColor; };
+extern const BodyEntry BODIES[BODY_COUNT];
+int bodyFromKey(const char* key);
 
 void defaultSettings(Settings& s);
 void defaultProgress(Progress& p);
@@ -133,7 +147,7 @@ void sanitizeSettings(Settings& s);
 // Blob persistido: [magic 'TUBA'][kind][version][len 2B][crc 4B][payload]
 enum class BlobKind : uint8_t { Settings = 1, Progress = 2, Checkpoint = 3 };
 static const int BLOB_HEADER = 12;
-static const uint8_t SETTINGS_VERSION = 2;
+static const uint8_t SETTINGS_VERSION = 3;
 static const uint8_t PROGRESS_VERSION = 2;
 static const uint8_t CHECKPOINT_VERSION = 1;
 static const size_t BLOB_MAX = 1024;

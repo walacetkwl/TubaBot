@@ -47,12 +47,34 @@ int cityIndexFromKey(const char* key) {
   return -1;
 }
 
-const EyeColorEntry EYE_COLORS[EYE_COLOR_COUNT] = {
-  {"ciano", "Ciano", 0x3EE6FF}, {"menta", "Menta", 0x4BF0A6}, {"lilas", "Lilás", 0xB592FF}, {"rosa", "Rosa", 0xFF7AB6},
-  {"ambar", "Âmbar", 0xFFB547}, {"azul", "Azul", 0x4C8DFF}, {"coral", "Coral", 0xFF6B5B}, {"branco", "Branco", 0xEAF2FF},
+// As 4 primeiras acompanham as cores físicas do TubaBot.
+const ExprColorEntry EXPR_COLORS[EXPR_COLOR_COUNT] = {
+  {"vermelho", "Vermelho", 0xFF4B4B, 0xD9232F},
+  {"azul", "Azul", 0x4F9BFF, 0x1D5FD1},
+  {"branco", "Branco", 0xF1F5FB, 0x7A8596},
+  {"grafite", "Grafite", 0xAEB6C2, 0x30353D},
+  {"ciano", "Ciano", 0x3EE6FF, 0x0092B0},
+  {"verde", "Verde", 0x4BF0A6, 0x12965F},
+  {"lilas", "Lilás", 0xB592FF, 0x6E43D8},
+  {"rosa", "Rosa", 0xFF7AB6, 0xD23F7C},
+  {"amarelo", "Amarelo", 0xFFD54A, 0xB98500},
+  {"laranja", "Laranja", 0xFF9F43, 0xD35F12},
 };
-int eyeColorFromKey(const char* key) {
-  for (int i = 0; i < EYE_COLOR_COUNT; i++) if (tbStreq(EYE_COLORS[i].key, key)) return i;
+int exprColorFromKey(const char* key) {
+  for (int i = 0; i < EXPR_COLOR_COUNT; i++) if (tbStreq(EXPR_COLORS[i].key, key)) return i;
+  if (tbStreq(key, "preto")) return 3;
+  return -1;
+}
+
+const BodyEntry BODIES[BODY_COUNT] = {
+  {"vermelho", "Vermelho", 0xC9303A, 0},
+  {"azul", "Azul", 0x2E6CCB, 1},
+  {"branco", "Branco", 0xEEEEEA, 2},
+  {"grafite", "Grafite", 0x3A3E45, 3},
+};
+int bodyFromKey(const char* key) {
+  for (int i = 0; i < BODY_COUNT; i++) if (tbStreq(BODIES[i].key, key)) return i;
+  if (tbStreq(key, "preto")) return 3;
   return -1;
 }
 
@@ -85,7 +107,7 @@ void defaultSettings(Settings& s) {
   s.weatherEnabled = 0;
   s.ntpEnabled = 0;
   s.volume = 60;
-  s.eyeColor = 0;
+  s.eyeColor = 3;
   s.eyeGlow = 1;
   s.watchFace = 0;
   s.imuReactions = 1; s.micReactions = 1; s.tiltLook = 1; s.faceDownSnooze = 1; s.nightDim = 1; s.wakeOnPickup = 1;
@@ -97,6 +119,8 @@ void defaultSettings(Settings& s) {
   }
   s.weatherCity = 0;
   s.weatherLatE4 = CITY_TABLE[0].latE4; s.weatherLonE4 = CITY_TABLE[0].lonE4;
+  s.theme = 0;
+  s.showClock = 0; s.showWeather = 0; s.showBattery = 0;
 }
 
 void defaultProgress(Progress& p) {
@@ -144,7 +168,7 @@ void sanitizeSettings(Settings& s) {
   s.weatherEnabled = s.weatherEnabled ? 1 : 0;
   s.ntpEnabled = s.ntpEnabled ? 1 : 0;
   clampField<uint8_t>(s.volume, 0, 100, d.volume);
-  clampField<uint8_t>(s.eyeColor, 0, EYE_COLOR_COUNT - 1, 0);
+  clampField<uint8_t>(s.eyeColor, 0, EXPR_COLOR_COUNT - 1, d.eyeColor);
   s.eyeGlow = s.eyeGlow ? 1 : 0;
   clampField<uint8_t>(s.watchFace, 0, WATCHFACE_COUNT - 1, 0);
   s.imuReactions = s.imuReactions ? 1 : 0; s.micReactions = s.micReactions ? 1 : 0; s.tiltLook = s.tiltLook ? 1 : 0;
@@ -161,6 +185,8 @@ void sanitizeSettings(Settings& s) {
   if (s.weatherCity != 255) clampField<uint8_t>(s.weatherCity, 0, (uint8_t)(CITY_COUNT - 1), 0);
   clampField<int32_t>(s.weatherLatE4, -900000, 900000, d.weatherLatE4);
   clampField<int32_t>(s.weatherLonE4, -1800000, 1800000, d.weatherLonE4);
+  s.theme = s.theme ? 1 : 0;
+  s.showClock = s.showClock ? 1 : 0; s.showWeather = s.showWeather ? 1 : 0; s.showBattery = s.showBattery ? 1 : 0;
 }
 
 size_t encodeBlob(BlobKind k, uint8_t ver, const void* payload, size_t len, uint8_t* out, size_t cap) {

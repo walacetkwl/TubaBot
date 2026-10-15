@@ -85,8 +85,8 @@ static const Color C_PINK = 0xFF5C9A, C_BLUSH = 0xFF6FA0, C_GOLD = 0xFFD54A, C_W
 // ── desenho ─────────────────────────────────────────────────────────────────
 struct Ctx {
   Canvas& c; const FaceXf& xf; float offX, offY;
-  float X(float x) const { return xf.cx + (x - (float)SCR_CX + offX) * xf.s; }
-  float Y(float y) const { return xf.cy + (y - (float)SCR_CY + offY) * xf.s; }
+  float X(float x) const { return xf.cx + (x - FACE_DESIGN_C + offX) * xf.s; }
+  float Y(float y) const { return xf.cy + (y - FACE_DESIGN_C + offY) * xf.s; }
   float S(float v) const { return v * xf.s; }
 };
 
@@ -114,7 +114,7 @@ static void drawEye(const Ctx& k, float cx, float cy, const EyeShape& e, bool ri
   if (st.glow && e.kind != EyeKind::X && e.kind != EyeKind::Spiral) {
     float lidv = e.kind == EyeKind::Normal ? (float)e.lidTop * h / h0 : 0.f;
     float vis = h - lidv;
-    k.c.glow(k.X(ex), k.Y(ey - h * 0.5f + lidv + vis * 0.5f), k.S(fmaxf_(w, vis) * 0.95f), col, 75);
+    k.c.glow(k.X(ex), k.Y(ey - h * 0.5f + lidv + vis * 0.5f), k.S(fmaxf_(w, vis) * 0.95f), col, st.light ? 42 : 75);
   }
 
   if (blink > 600 && e.kind != EyeKind::Normal) {  // olhos especiais piscam como traço
@@ -227,7 +227,7 @@ static void drawEye(const Ctx& k, float cx, float cy, const EyeShape& e, bool ri
 }
 
 static void drawMouth(const Ctx& k, Mouth m, float dx, ms_t now, Color col) {
-  const float cx = 233.f + dx, cy = (float)FaceRenderer::kMouthY;
+  const float cx = FACE_DESIGN_C + dx, cy = (float)FaceRenderer::kMouthY;
   switch (m) {
     case Mouth::None: break;
     case Mouth::Smile: k.c.arc(k.X(cx), k.Y(cy - 26), k.S(34.f), k.S(11.f), kPi - 0.95f, 1.9f, col); break;
@@ -289,7 +289,7 @@ static void drop(const Ctx& k, float x, float y, float r, Color col, int a) {
   k.c.fillTriangle({k.X(x - r * 0.92f), k.Y(y - r * 0.38f)}, {k.X(x + r * 0.92f), k.Y(y - r * 0.38f)}, {k.X(x), k.Y(y - r * 2.4f)}, col, a);
 }
 
-static void drawExtras(const Ctx& k, uint16_t ex, ms_t now, Color col) {
+static void drawExtras(const Ctx& k, uint16_t ex, ms_t now, Color col, const FaceStyle& st) {
   if (ex & FX_AURA) {
     float p = 0.5f + 0.5f * fsin((float)(now % 4000) / 4000.f * kTau);
     k.c.ring(k.X(233), k.Y(233), k.S(196.f + 8.f * p), k.S(6.f), col, 60 + (int)(60 * p));
@@ -305,14 +305,14 @@ static void drawExtras(const Ctx& k, uint16_t ex, ms_t now, Color col) {
       float p = (float)t / 2100.f;
       float x = 318 + 28 * i + 10 * fsin(p * kTau), y = 150 - 60 * p - 20 * i;
       int a = (int)(255 * (1.f - p));
-      k.c.text(k.X(x), k.Y(y), i == 2 ? "Z" : "z", i == 0 ? FONT_M : (i == 1 ? FONT_L : FONT_XL), 0xA9B4FF, a, Align::Center);
+      k.c.text(k.X(x), k.Y(y), i == 2 ? "Z" : "z", i == 0 ? FONT_M : (i == 1 ? FONT_L : FONT_XL), st.zzz, a, Align::Center);
     }
   }
   if (ex & FX_SPARKLE) {
     static const int16_t P[5][3] = {{70, 110, 22}, {395, 120, 26}, {233, 66, 16}, {60, 300, 14}, {408, 310, 18}};
     for (int i = 0; i < 5; i++) {
       float ph = fsin((float)((now + (ms_t)i * 377) % 1100) / 1100.f * kTau);
-      sparkle(k, P[i][0], P[i][1], (float)P[i][2] * (0.7f + 0.3f * ph), i & 1 ? C_GOLD : 0xFFFFFF, 220);
+      sparkle(k, P[i][0], P[i][1], (float)P[i][2] * (0.7f + 0.3f * ph), i & 1 ? C_GOLD : st.fx, 220);
     }
   }
   if (ex & FX_HEARTS) {
@@ -375,12 +375,12 @@ void FaceRenderer::drawFace(Canvas& c, const FaceDef& f, const FaceStyle& st, ms
   Ctx k{c, xf, 0.f, 0.f};
   Color col = st.eye;
   if (f.extras & FX_RAINBOW) col = hue((int)((now / 12) % 360));
-  drawExtras(k, (uint16_t)(f.extras & (FX_AURA | FX_BLUSH)), now, col);
+  drawExtras(k, (uint16_t)(f.extras & (FX_AURA | FX_BLUSH)), now, col, st);
   float by = breathe * 3.f;
   drawEye(k, (float)kLeftX, (float)kEyeY + by, f.L, false, blink, lookX, lookY, breathe, col, st, now);
   drawEye(k, (float)kRightX, (float)kEyeY + by, f.R, true, blink, lookX, lookY, breathe, col, st, now);
   if (st.mouth && blink < 500) drawMouth(k, f.mouth, lookX * 0.5f, now, col);
-  drawExtras(k, (uint16_t)(f.extras & ~(FX_AURA | FX_BLUSH)), now, col);
+  drawExtras(k, (uint16_t)(f.extras & ~(FX_AURA | FX_BLUSH)), now, col, st);
 }
 
 // ── estado e animação ───────────────────────────────────────────────────────
@@ -457,15 +457,16 @@ void FaceRenderer::draw(Canvas& c, ms_t now, const FaceStyle& st) {
   const FaceDef* tgt = petting_ && target_ != Expr::Love ? &RELAXED : &faceDef(cur);
   float breathe = fsin((float)(now % 4200) / 4200.f * kTau);
   FaceXf xf;
+  xf.cy = layoutCy_; xf.s = layoutS_;
   xf.cx += (float)driftX_; xf.cy += (float)driftY_;
   if (dance_) {
     float ph = (float)dancePhase_ / 1000.f;
-    xf.cy -= 16.f * fabsf_(fsin(ph * kPi));
-    xf.cx += 10.f * fsin(ph * kPi);
+    xf.cy -= 16.f * layoutS_ * fabsf_(fsin(ph * kPi));
+    xf.cx += 10.f * layoutS_ * fsin(ph * kPi);
   }
   if (bounceAt_ && now - bounceAt_ < 320) {
     float p = (float)(now - bounceAt_) / 320.f;
-    xf.s = 1.f - 0.07f * fsin(p * kPi) * (1.f - p);
+    xf.s = layoutS_ * (1.f - 0.07f * fsin(p * kPi) * (1.f - p));
   }
   ms_t tt = now - transStart_;
   const FaceDef& src = faceDef(from_);

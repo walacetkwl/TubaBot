@@ -1,7 +1,8 @@
-// Rosto do TubaBot v2: olhos luminosos coloridos em tela redonda 466×466.
-// Expressões paramétricas (todas as medidas no espaço de desenho 466×466),
-// transições suaves, piscar, olhar natural, respiração, olhar que segue o
-// dedo/inclinação, dança no ritmo e deslocamento anti-marcação do AMOLED.
+// Rosto do TubaBot: olhos luminosos coloridos ocupando a tela inteira.
+// Expressões paramétricas (todas as medidas num "espaço de desenho" 466×466,
+// centro 233,233, ampliado/reduzido para a tela por FaceXf), transições suaves,
+// piscar, olhar natural, respiração, olhar que segue o dedo, dança no ritmo.
+// Cores vêm de FaceStyle (cor das expressões + tema claro/escuro).
 #pragma once
 #include "gfx.h"
 
@@ -43,9 +44,12 @@ struct FaceDef { EyeShape L, R; Mouth mouth; uint16_t extras; };
 const FaceDef& faceDef(Expr e);
 
 struct FaceStyle {
-  Color eye = 0x3EE6FF;     // cor dos olhos (preferência "cor dos olhos")
+  Color eye = 0x3EE6FF;     // cor das expressões (já adaptada ao tema)
   bool glow = true;         // halo luminoso
   bool mouth = true;        // mostrar boca
+  bool light = false;       // tema claro (fundo branco)
+  Color fx = 0xFFFFFF;      // brilhos/estrelinhas (branco no escuro; tom da cor no claro)
+  Color zzz = 0xA9B4FF;     // "zzz" do sono
 };
 
 struct PersonalityTuning {
@@ -57,7 +61,10 @@ struct PersonalityTuning {
 };
 
 // Transformação do espaço de desenho (centro 233,233) para a tela.
-struct FaceXf { float cx = (float)SCR_CX, cy = (float)SCR_CY, s = 1.f; };
+static const float FACE_DESIGN_C = 233.f;
+static const float FACE_SCALE = 0.78f;   // rosto em tela cheia (320×240, paisagem)
+static const float FACE_CY = 122.f;
+struct FaceXf { float cx = (float)SCR_CX, cy = FACE_CY, s = FACE_SCALE; };
 
 class FaceRenderer {
  public:
@@ -74,7 +81,8 @@ class FaceRenderer {
   void setLookTarget(bool active, int nx, int ny) { lookExt_ = active; extX_ = nx; extY_ = ny; }
   void bounce(ms_t now) { bounceAt_ = now; }        // "boop": achata e volta
   void setDance(bool on, int phase1000) { dance_ = on; dancePhase_ = phase1000; }
-  void setDrift(int dx, int dy) { driftX_ = dx; driftY_ = dy; }  // anti-marcação
+  void setDrift(int dx, int dy) { driftX_ = dx; driftY_ = dy; }  // pequenas variações de posição
+  void setLayout(float cy, float s) { layoutCy_ = cy; layoutS_ = s; }
   bool animating(ms_t now) const;
 
   static void drawFace(Canvas& c, const FaceDef& f, const FaceStyle& st, ms_t now, const FaceXf& xf,
@@ -99,6 +107,7 @@ class FaceRenderer {
   bool dance_ = false;
   int dancePhase_ = 0;
   int driftX_ = 0, driftY_ = 0;
+  float layoutCy_ = FACE_CY, layoutS_ = FACE_SCALE;
   ms_t lastUpdate_ = 0;
 };
 

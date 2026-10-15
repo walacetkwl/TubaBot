@@ -23,12 +23,12 @@ CLOCK = "0123456789: "
 
 # (nome, peso, tamanho em px, conjunto)
 FONTS = [
-    ("FONT_S", "Bold", 20, FULL),
-    ("FONT_M", "Bold", 26, FULL),
-    ("FONT_L", "ExtraBold", 34, FULL),
-    ("FONT_XL", "ExtraBold", 52, FULL),
-    ("FONT_XXL", "ExtraBold", 92, DIGITS),
-    ("FONT_CLOCK", "Black", 150, CLOCK),
+    ("FONT_S", "Bold", 14, FULL),
+    ("FONT_M", "Bold", 17, FULL),
+    ("FONT_L", "ExtraBold", 22, FULL),
+    ("FONT_XL", "ExtraBold", 32, FULL),
+    ("FONT_XXL", "ExtraBold", 56, DIGITS),
+    ("FONT_CLOCK", "Black", 92, CLOCK),
 ]
 
 

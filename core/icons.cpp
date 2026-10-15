@@ -47,6 +47,16 @@ void drawIcon(Canvas& c, Icon id, float x, float y, float s, Color col, int a) {
       c.arc(X(19.5f), Y(5.5f), 3 * u, t, -1.0f, 1.8f, col, a);
       L(7, 20, 5.5f, 22, t); L(17, 20, 18.5f, 22, t);
       break;
+    case Icon::Menu:
+      for (int k = 0; k < 9; k++) c.fillRoundRect(X(3.f + 6.6f * (float)(k % 3)), Y(3.f + 6.6f * (float)(k / 3)), 4.8f * u, 4.8f * u, 1.4f * u, col, a);
+      break;
+    case Icon::Palette:
+      c.fillCircle(x, y, 9.5f * u, col, a);
+      c.fillCircle(X(8), Y(8.5f), 1.8f * u, 0x000000, a);
+      c.fillCircle(X(13), Y(6.5f), 1.8f * u, 0x000000, a);
+      c.fillCircle(X(17), Y(10), 1.8f * u, 0x000000, a);
+      c.fillCircle(X(14.5f), Y(16.5f), 2.6f * u, 0x000000, a);
+      break;
     case Icon::Games:
       c.fillRoundRect(X(2), Y(7), 20 * u, 11 * u, 5.5f * u, col, a);
       c.fillRect((int)X(6.2f), (int)Y(10.2f), (int)(1.6f * u + 1), (int)(5 * u), 0x000000, a);

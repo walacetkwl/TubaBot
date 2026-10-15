@@ -16,12 +16,12 @@ void drawSprite(Canvas& c, const Sprite& s, int x, int y, Color col) {
       if (s.rows[j][i] == '#') c.fillRect(x + i, y + j, 1, 1, col);
 }
 
-// cantos arredondados: pinta de preto o que fica fora do retângulo arredondado
+// cantos arredondados: pinta com o fundo do tema o que fica fora do retângulo arredondado
 static void cornerMask(Canvas& c, float x, float y, float w, float h, float r) {
   float hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
   for (int k = 0; k < 4; k++) {
     float qx = (k & 1) ? x + w - r - 1 : x, qy = (k & 2) ? y + h - r - 1 : y;
-    c.shade(qx, qy, qx + r + 1, qy + r + 1, 0x000000, 255, [=](float px, float py) {
+    c.shade(qx, qy, qx + r + 1, qy + r + 1, ui::BG, 255, [=](float px, float py) {
       float ax = fabsf_(px - cx) - (hx - r), ay = fabsf_(py - cy) - (hy - r);
       float d = fsqrt(fmaxf_(ax, 0.f) * fmaxf_(ax, 0.f) + fmaxf_(ay, 0.f) * fmaxf_(ay, 0.f)) + fminf_(fmaxf_(ax, ay), 0.f) - r;
       return -d;
@@ -33,7 +33,7 @@ static void stage(Canvas& c, float x, float y, float w, float h, float r, Color 
   c.vGradient((int)x, (int)y, (int)w, (int)h, top, bot);
   cornerMask(c, x, y, w, h, r);
 }
-static void seaStage(Canvas& c) { stage(c, GV::X(0), GV::Y(0), GV::S(128), GV::S(64), 26.f, SEA_TOP, SEA_BOT); }
+static void seaStage(Canvas& c) { stage(c, GV::X(0), GV::Y(0), GV::S(128), GV::S(64), 18.f, SEA_TOP, SEA_BOT); }
 
 static void bubbles(Canvas& c, ms_t now, float x0, float y0, float w, float h, int n) {
   for (int i = 0; i < n; i++) {
@@ -84,38 +84,40 @@ static void jelly(Canvas& c, float x, float y, float s, ms_t now) {
   c.fillCircle(x - 2 * s, y - 3 * s, 1.1f * s, 0xFFFFFF, 160);
 }
 
-// ── telas comuns ────────────────────────────────────────────────────────────
+// ── telas comuns (320×240) ──────────────────────────────────────────────────
+static const Color CARD_TEXT = 0xF3F5F8, CARD_MUTED = 0xC9D1DE;
+
 static void introCard(Canvas& c, Icon ic, Color col, const char* title, const char* l1, const char* l2, const char* rec) {
-  c.fillCircle((float)SCR_CX, 112.f, 44.f, col);
-  drawIcon(c, ic, (float)SCR_CX, 112.f, 50.f, 0x0C0F14);
-  c.textCentered(196.f, title, FONT_L, ui::TEXT);
-  c.textCentered(240.f, l1, FONT_M, ui::MUTED);
-  if (l2) c.textCentered(272.f, l2, FONT_M, ui::MUTED);
-  if (rec) c.textCentered(314.f, rec, FONT_S, col);
-  ui::pill(c, (float)SCR_CX, 364.f, 262.f, 56.f, col, "Toque para começar", FONT_M, 0x0C0F14);
-  c.textCentered(424.f, "segure para sair", FONT_S, ui::DIM);
+  c.fillCircle(70.f, 96.f, 40.f, col);
+  drawIcon(c, ic, 70.f, 96.f, 46.f, ui::INK);
+  c.text(126.f, 72.f, title, FONT_L, ui::TEXT);
+  c.text(126.f, 100.f, l1, FONT_M, ui::MUTED);
+  if (l2) c.text(126.f, 122.f, l2, FONT_S, ui::MUTED);
+  if (rec) c.text(126.f, 148.f, rec, FONT_S, ui::acc(col));
+  ui::pill(c, (float)SCR_CX, 194.f, 220.f, 40.f, col, "Toque para começar", FONT_M, ui::INK);
+  c.textCentered(232.f, "segure para sair", FONT_S, ui::DIM);
 }
 
 void Game::drawResultFooter(Canvas& c) {
-  ui::pill(c, (float)SCR_CX, 392.f, 270.f, 54.f, ui::TEXT, "Toque: jogar de novo", FONT_M, 0x0C0F14);
+  ui::pill(c, (float)SCR_CX, 216.f, 220.f, 36.f, ui::TEXT, "Toque: jogar de novo", FONT_M, ui::BG);
 }
 
 static void resultCard(Canvas& c, const char* title, const char* l1, const char* l2, bool record, Color col) {
-  c.fillRoundRect(78.f, 150.f, 310.f, 170.f, 36.f, 0x0B0F17, 235);
-  c.strokeRoundRect(78.f, 150.f, 310.f, 170.f, 36.f, 3.f, record ? GOLD : col);
-  c.textCentered(198.f, title, FONT_L, record ? GOLD : ui::TEXT);
-  if (l1) c.textCentered(244.f, l1, FONT_M, ui::TEXT);
-  if (l2) c.textCentered(284.f, l2, FONT_S, record ? GOLD : ui::MUTED);
+  c.fillRoundRect(50.f, 56.f, 220.f, 112.f, 24.f, 0x0B0F17, 235);
+  c.strokeRoundRect(50.f, 56.f, 220.f, 112.f, 24.f, 2.5f, record ? GOLD : col);
+  c.textCentered(90.f, title, FONT_L, record ? GOLD : CARD_TEXT);
+  if (l1) c.textCentered(122.f, l1, FONT_M, CARD_TEXT);
+  if (l2) c.textCentered(150.f, l2, FONT_S, record ? GOLD : CARD_MUTED);
 }
 
 static void pausedOverlay(Canvas& c) {
-  c.fillCircle((float)SCR_CX, (float)SCR_CY, 233.f, 0x000000, 150);
-  ui::roundButton(c, (float)SCR_CX, 200.f, 52.f, ui::TEXT, Icon::Play, 0x0C0F14);
-  c.textCentered(300.f, "PAUSA", FONT_L, ui::TEXT);
-  c.textCentered(338.f, "toque para seguir", FONT_S, ui::MUTED);
+  c.fillRect(0, 0, SCR_W, SCR_H, ui::BG, 170);
+  ui::roundButton(c, (float)SCR_CX, 100.f, 30.f, ui::TEXT, Icon::Play, ui::BG);
+  c.textCentered(166.f, "PAUSA", FONT_L, ui::TEXT);
+  c.textCentered(190.f, "toque para seguir", FONT_S, ui::MUTED);
 }
 
-static void scoreTop(Canvas& c, const char* s, Color col) { c.textCentered(118.f, s, FONT_XL, col); }
+static void scoreTop(Canvas& c, const char* s, Color col) { c.textCentered(42.f, s, FONT_XL, col); }
 
 // ════════ Pula, Tuba! ════════
 void JumpGame::draw(Canvas& c, ms_t now) {
@@ -130,7 +132,7 @@ void JumpGame::draw(Canvas& c, ms_t now) {
   // raios de luz e bolhas
   for (int i = 0; i < 3; i++) {
     float x = GV::X(20.f + 44.f * (float)i - fmaxf_(0.f, (float)((int)sc % 44)) * 0.3f);
-    Pt ray[4] = {{x, GV::Y(0)}, {x + 26.f, GV::Y(0)}, {x + 70.f, GV::Y(kGroundY)}, {x + 30.f, GV::Y(kGroundY)}};
+    Pt ray[4] = {{x, GV::Y(0)}, {x + 20.f, GV::Y(0)}, {x + 54.f, GV::Y(kGroundY)}, {x + 24.f, GV::Y(kGroundY)}};
     c.fillPolygon(ray, 4, 0xFFFFFF, 14);
   }
   bubbles(c, now, GV::X(4), GV::Y(4), GV::S(120), GV::S(50), 7);
@@ -141,12 +143,12 @@ void JumpGame::draw(Canvas& c, ms_t now) {
   for (const auto& o : obs_) {
     if (!o.active) continue;
     float ox = (float)floorDiv1000(o.x);
-    c.fillRoundRect(GV::X(ox), GV::Y((float)(kGroundY - o.h)), GV::S((float)o.w), GV::S((float)o.h) + 2.f, 5.f, CORAL);
-    c.fillRoundRect(GV::X(ox) + 3.f, GV::Y((float)(kGroundY - o.h)) + 3.f, GV::S((float)o.w) - 6.f, 6.f, 3.f, CORAL_L);
+    c.fillRoundRect(GV::X(ox), GV::Y((float)(kGroundY - o.h)), GV::S((float)o.w), GV::S((float)o.h) + 2.f, 4.f, CORAL);
+    c.fillRoundRect(GV::X(ox) + 2.f, GV::Y((float)(kGroundY - o.h)) + 2.f, GV::S((float)o.w) - 4.f, 5.f, 2.5f, CORAL_L);
   }
   float top = (float)(kGroundY - SPR_SHARK.h) - (float)y_ / 1000.f;
-  sharkSide(c, GV::X((float)kSharkX), GV::Y(top), (float)GV::kScale, phase_ != GamePhase::Result);
-  cornerMask(c, GV::X(0), GV::Y(0), GV::S(128), GV::S(64), 26.f);
+  sharkSide(c, GV::X((float)kSharkX), GV::Y(top), GV::kScale, phase_ != GamePhase::Result);
+  cornerMask(c, GV::X(0), GV::Y(0), GV::S(128), GV::S(64), 18.f);
   StrBuf s(b, sizeof b); s.num(score_);
   scoreTop(c, b, ui::TEXT);
   if (phase_ == GamePhase::Result) {
@@ -156,7 +158,7 @@ void JumpGame::draw(Canvas& c, ms_t now) {
     resultCard(c, "Ops! Quase!", l1, l2, newRecord, 0x5CC8FF);
     drawResultFooter(c);
   } else {
-    c.textCentered(380.f, "toque: pular · segure: sair", FONT_S, ui::DIM);
+    c.textCentered(230.f, "toque: pular · segure: sair", FONT_S, ui::DIM);
   }
   if (paused_) pausedOverlay(c);
 }
@@ -172,43 +174,43 @@ void ReflexGame::draw(Canvas& c, ms_t now) {
     }
     case Sub::Waiting: {
       float p = 0.5f + 0.5f * fsin((float)(now % 1000) / 1000.f * kTau);
-      c.fillCircle((float)SCR_CX, (float)SCR_CY, 233.f, 0x2A0B12);
-      c.ring((float)SCR_CX, (float)SCR_CY, 150.f + 10.f * p, 8.f, 0xFF5E57, 150);
-      c.textCentered(250.f, "ESPERE...", FONT_XL, 0xFFB4A8);
-      c.textCentered(310.f, "não toque ainda", FONT_M, ui::MUTED);
+      c.fillRect(0, 0, SCR_W, SCR_H, 0x2A0B12);
+      c.ring((float)SCR_CX, (float)SCR_CY, 92.f + 8.f * p, 6.f, 0xFF5E57, 150);
+      c.textCentered(128.f, "ESPERE...", FONT_XL, 0xFFB4A8);
+      c.textCentered(158.f, "não toque ainda", FONT_M, 0xD8B4B0);
       break;
     }
     case Sub::Signal:
-      c.fillCircle((float)SCR_CX, (float)SCR_CY, 233.f, 0x22C55E);
-      c.textCentered(258.f, "AGORA!", FONT_XL, 0x062B14);
+      c.fillRect(0, 0, SCR_W, SCR_H, 0x22C55E);
+      c.textCentered(134.f, "AGORA!", FONT_XL, 0x062B14);
       signalRendered_ = true;
       break;
     case Sub::Done: {
       StrBuf s(b, sizeof b); s.num(lastMs_).put(" ms");
       Color col = lastMs_ < 250 ? ui::OK : lastMs_ < 400 ? 0xFFD54A : ui::WARN;
-      c.textCentered(214.f, b, FONT_XXL, col);
+      c.textCentered(124.f, b, FONT_XXL, ui::acc(col));
       const char* react = lastMs_ < 200 ? "Uau! Relâmpago!" : lastMs_ < 300 ? "Rápido!" : lastMs_ < 450 ? "Boa!" : "Dá pra melhorar";
-      c.textCentered(126.f, react, FONT_L, ui::TEXT);
+      c.textCentered(48.f, react, FONT_L, ui::TEXT);
       StrBuf s2(b, sizeof b);
       if (newRecord) s2.put("Novo recorde!"); else { s2.put("Melhor: "); if (best) s2.num(best).put(" ms"); else s2.put("--"); }
-      c.textCentered(282.f, b, FONT_M, newRecord ? GOLD : ui::MUTED);
+      c.textCentered(160.f, b, FONT_M, newRecord ? GOLD : ui::MUTED);
       drawResultFooter(c);
       break;
     }
     case Sub::Early:
-      c.textCentered(170.f, "Cedo demais!", FONT_XL, ui::WARN);
-      c.textCentered(230.f, "Rodada inválida", FONT_M, ui::TEXT);
-      c.textCentered(270.f, "Espere o AGORA!", FONT_S, ui::MUTED);
+      c.textCentered(84.f, "Cedo demais!", FONT_XL, ui::WARN);
+      c.textCentered(120.f, "Rodada inválida", FONT_M, ui::TEXT);
+      c.textCentered(146.f, "Espere o AGORA!", FONT_S, ui::MUTED);
       drawResultFooter(c);
       break;
     case Sub::Timeout:
-      c.textCentered(190.f, "Tempo esgotado", FONT_L, ui::WARN);
-      c.textCentered(240.f, "Rodada inválida", FONT_M, ui::MUTED);
+      c.textCentered(96.f, "Tempo esgotado", FONT_L, ui::WARN);
+      c.textCentered(128.f, "Rodada inválida", FONT_M, ui::MUTED);
       drawResultFooter(c);
       break;
     case Sub::Interrupted:
-      c.textCentered(190.f, "Rodada interrompida", FONT_L, ui::TEXT);
-      c.textCentered(240.f, "(sem recorde)", FONT_M, ui::MUTED);
+      c.textCentered(96.f, "Rodada interrompida", FONT_L, ui::TEXT);
+      c.textCentered(128.f, "(sem recorde)", FONT_M, ui::MUTED);
       drawResultFooter(c);
       break;
   }
@@ -226,13 +228,13 @@ void FishGame::draw(Canvas& c, ms_t now) {
   bubbles(c, now, GV::X(4), GV::Y(4), GV::S(120), GV::S(56), 5);
   // quadro alvo (interior útil x = 49..78)
   float bx = GV::X(kBoxX), by = GV::Y(kBoxY), bs = GV::S(kBoxSize);
-  c.fillRoundRect(bx, by, bs, bs, 10.f, 0xFFFFFF, 22);
-  c.strokeRoundRect(bx + 1.5f, by + 1.5f, bs - 3.f, bs - 3.f, 9.f, 3.f, GOLD);
+  c.fillRoundRect(bx, by, bs, bs, 8.f, 0xFFFFFF, 22);
+  c.strokeRoundRect(bx + 1.f, by + 1.f, bs - 2.f, bs - 2.f, 7.f, 2.5f, GOLD);
   for (int k = 0; k < 4; k++) {
-    float qx = (k & 1) ? bx + bs + 6.f : bx - 6.f, qy = (k & 2) ? by + bs + 6.f : by - 6.f;
+    float qx = (k & 1) ? bx + bs + 5.f : bx - 5.f, qy = (k & 2) ? by + bs + 5.f : by - 5.f;
     float sx = (k & 1) ? -1.f : 1.f, sy = (k & 2) ? -1.f : 1.f;
-    c.line(qx, qy, qx + 16.f * sx, qy, 4.f, GOLD);
-    c.line(qx, qy, qx, qy + 16.f * sy, 4.f, GOLD);
+    c.line(qx, qy, qx + 12.f * sx, qy, 3.f, GOLD);
+    c.line(qx, qy, qx, qy + 12.f * sy, 3.f, GOLD);
   }
   ms_t gt = gameTime(now);
   StrBuf sc(b, sizeof b); sc.num(captures_);
@@ -240,14 +242,14 @@ void FishGame::draw(Canvas& c, ms_t now) {
   if (phase_ == GamePhase::Playing) {
     if (catching_) {
       float p = (float)(gt - catchAt_) / (float)catchAnimMs;
-      c.glow((float)SCR_CX, by + bs * 0.5f, 90.f, GOLD, (int)(160.f * (1.f - p)));
-      c.textCentered(by + bs * 0.5f + 16.f, "NHAC!", FONT_XL, GOLD);
+      c.glow((float)SCR_CX, by + bs * 0.5f, 70.f, GOLD, (int)(160.f * (1.f - p)));
+      c.textCentered(by + bs * 0.5f + 11.f, "NHAC!", FONT_XL, GOLD);
     } else {
-      fishSide(c, GV::X((float)floorDiv1000(fishXsubAt(gt))), GV::Y((float)kFishY), (float)GV::kScale, FISH, FISH_L);
+      fishSide(c, GV::X((float)floorDiv1000(fishXsubAt(gt))), GV::Y((float)kFishY), GV::kScale, FISH, FISH_L);
     }
-    c.textCentered(380.f, "toque com o peixe no quadro", FONT_S, ui::DIM);
+    c.textCentered(230.f, "toque com o peixe no quadro", FONT_S, ui::DIM);
   } else if (phase_ == GamePhase::Result) {
-    fishSide(c, GV::X((float)lostX_), GV::Y((float)kFishY), (float)GV::kScale, 0x9AA5B8, 0xC9D1DE);
+    fishSide(c, GV::X((float)lostX_), GV::Y((float)kFishY), GV::kScale, 0x9AA5B8, 0xC9D1DE);
     char l1[32], l2[32];
     StrBuf a(l1, sizeof l1); a.put("Peixes: ").num(captures_);
     StrBuf r(l2, sizeof l2); if (newRecord) r.put("Novo recorde!"); else r.put("Recorde: ").num(best);
@@ -263,35 +265,35 @@ void TimingGame::draw(Canvas& c, ms_t now) {
   const Color col = 0x4BF0A6;
   switch (sub_) {
     case Sub::Ready: {
-      c.textCentered(110.f, "No Tempo Certo", FONT_L, ui::TEXT);
-      c.textCentered(160.f, "Pare o tempo em:", FONT_M, ui::MUTED);
+      c.textCentered(34.f, "No Tempo Certo", FONT_L, ui::TEXT);
+      c.textCentered(60.f, "Pare o tempo em:", FONT_M, ui::MUTED);
       StrBuf s(b, sizeof b); s.fixed2(targetCs_).put(" s");
-      c.textCentered(270.f, b, FONT_XXL, col);
+      c.textCentered(124.f, b, FONT_XXL, ui::acc(col));
       StrBuf s2(b, sizeof b); s2.put("Recorde: "); if (best) s2.fixed2(best).put('%'); else s2.put("--");
-      c.textCentered(318.f, b, FONT_S, ui::MUTED);
-      ui::pill(c, (float)SCR_CX, 370.f, 262.f, 56.f, col, "Toque para começar", FONT_M, 0x0C0F14);
-      c.textCentered(428.f, "segure para sair", FONT_S, ui::DIM);
+      c.textCentered(152.f, b, FONT_S, ui::MUTED);
+      ui::pill(c, (float)SCR_CX, 194.f, 220.f, 40.f, col, "Toque para começar", FONT_M, ui::INK);
+      c.textCentered(232.f, "segure para sair", FONT_S, ui::DIM);
       break;
     }
     case Sub::Countdown: {
       ms_t left = goAt_ > now ? goAt_ - now : 0;
       int digit = tbClamp((int)((left + 999) / 1000), 1, 3);
       float frac = (float)(left % 1000) / 1000.f;
-      ui::progressRing(c, 200.f, 10.f, (int)(frac * 1000.f), col);
+      ui::progressRing(c, (float)SCR_CX, 128.f, 86.f, 8.f, (int)(frac * 1000.f), ui::acc(col));
       char d[2] = {(char)('0' + digit), 0};
-      c.textCentered(282.f, d, FONT_CLOCK, ui::TEXT);
+      c.textCentered(160.f, d, FONT_CLOCK, ui::TEXT);
       StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" s");
-      c.textCentered(120.f, b, FONT_M, ui::MUTED);
+      c.text(14.f, 28.f, b, FONT_M, ui::MUTED);
       break;
     }
     case Sub::Running: {
       ms_t e = now >= goAt_ ? now - goAt_ : 0;
       StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" s");
-      c.textCentered(120.f, b, FONT_M, ui::MUTED);
+      c.textCentered(44.f, b, FONT_M, ui::MUTED);
       StrBuf s2(b, sizeof b); s2.fixed2((int64_t)(e / 10));
-      c.textCentered(270.f, b, FONT_XXL, ui::TEXT);
-      if (e < 400) c.textCentered(350.f, "VAI!", FONT_XL, col);
-      else c.textCentered(350.f, "toque para parar", FONT_M, ui::MUTED);
+      c.textCentered(140.f, b, FONT_XXL, ui::TEXT);
+      if (e < 400) c.textCentered(196.f, "VAI!", FONT_XL, ui::acc(col));
+      else c.textCentered(196.f, "toque para parar", FONT_M, ui::MUTED);
       break;
     }
     case Sub::Done: {
@@ -300,25 +302,25 @@ void TimingGame::draw(Canvas& c, ms_t now) {
       int32_t pct = proximity100(elapsed_, target);
       Color pc = pct >= 9800 ? GOLD : pct >= 9000 ? col : ui::WARN;
       StrBuf s(b, sizeof b); s.put("Alvo ").fixed2(targetCs_).put(" · Você ").fixed2(elapsed_ / 10);
-      c.textCentered(112.f, b, FONT_M, ui::MUTED);
+      c.textCentered(34.f, b, FONT_M, ui::MUTED);
       StrBuf s2(b, sizeof b); s2.fixed2(pct).put('%');
-      c.textCentered(232.f, b, FONT_XXL, pc);
+      c.textCentered(106.f, b, FONT_XXL, ui::acc(pc));
       StrBuf s3(b, sizeof b); s3.put("Diferença ").put(diff >= 0 ? '+' : '-').fixed2(tbAbs(diff) / 10).put(" s");
-      c.textCentered(282.f, b, FONT_M, ui::TEXT);
+      c.textCentered(140.f, b, FONT_M, ui::TEXT);
       StrBuf s4(b, sizeof b);
       if (newRecord) s4.put("Novo recorde!"); else { s4.put("Recorde: "); if (best) s4.fixed2(best).put('%'); else s4.put("--"); }
-      c.textCentered(322.f, b, FONT_S, newRecord ? GOLD : ui::MUTED);
+      c.textCentered(166.f, b, FONT_S, newRecord ? GOLD : ui::MUTED);
       drawResultFooter(c);
       break;
     }
     case Sub::Timeout:
-      c.textCentered(190.f, "Passou de 20 s!", FONT_L, ui::WARN);
-      c.textCentered(240.f, "Rodada encerrada", FONT_M, ui::MUTED);
+      c.textCentered(96.f, "Passou de 20 s!", FONT_L, ui::WARN);
+      c.textCentered(128.f, "Rodada encerrada", FONT_M, ui::MUTED);
       drawResultFooter(c);
       break;
     case Sub::Interrupted:
-      c.textCentered(190.f, "Rodada interrompida", FONT_L, ui::TEXT);
-      c.textCentered(240.f, "(sem recorde)", FONT_M, ui::MUTED);
+      c.textCentered(96.f, "Rodada interrompida", FONT_L, ui::TEXT);
+      c.textCentered(128.f, "(sem recorde)", FONT_M, ui::MUTED);
       drawResultFooter(c);
       break;
   }
@@ -329,23 +331,27 @@ void DiveGame::draw(Canvas& c, ms_t now) {
   char b[40];
   if (phase_ == GamePhase::Intro) {
     StrBuf r(b, sizeof b); r.put("Recorde: ").num(best).put(" peixes");
-    introCard(c, Icon::Level, 0x3EE6D0, "Mergulho do Tuba", "Incline (ou arraste)", "pegue peixes, fuja das águas-vivas", b);
+    introCard(c, Icon::Level, 0x3EE6D0, "Mergulho do Tuba", "Arraste o dedo", "pegue peixes, fuja das águas-vivas", b);
     return;
   }
-  const float s = (float)kViewScale, X0 = (float)kViewX0, Y0 = (float)kViewY0;
-  stage(c, X0, Y0, (float)kW * s, (float)kH * s, 46.f, 0x15649F, 0x061A38);
-  bubbles(c, now, X0 + 10.f, Y0 + 10.f, (float)kW * s - 20.f, (float)kH * s - 20.f, 6);
+  const float s = (float)kViewScaleMilli / 1000.f, X0 = (float)kViewX0, Y0 = (float)kViewY0;
+  stage(c, X0, Y0, (float)kW * s, (float)kH * s, 26.f, 0x15649F, 0x061A38);
+  bubbles(c, now, X0 + 8.f, Y0 + 8.f, (float)kW * s - 16.f, (float)kH * s - 16.f, 6);
+  c.setClip(IRect((int)X0, (int)Y0, (int)(X0 + (float)kW * s), (int)(Y0 + (float)kH * s)));
   for (const auto& it : items_) {
     if (!it.active) continue;
     float x = X0 + (float)it.x / 1000.f * s, y = Y0 + (float)it.y / 1000.f * s;
     if (it.jelly) jelly(c, x, y, s, now);
     else fishSide(c, x - 7.f * s, y - 3.5f * s, s * 0.9f, FISH, FISH_L);
   }
+  c.resetClip();
   bool blink = simT_ < invulnUntil_ && ((simT_ / 120) & 1);
   if (!blink) sharkSide(c, X0 + (float)sharkX_ / 1000.f * s - 8.f * s, Y0 + (float)kSharkY * s - 4.5f * s, s, phase_ != GamePhase::Result);
   StrBuf sc(b, sizeof b); sc.num(score_);
-  c.text(X0 + 40.f, Y0 + 50.f, b, FONT_XL, ui::TEXT);
-  for (int i = 0; i < kLives; i++) c.heart(X0 + 196.f + 26.f * (float)i, Y0 + 36.f, 20.f, i < lives_ ? (Color)0xFF5C9A : ui::SURF2);
+  c.text(X0 * 0.5f, 72.f, b, FONT_XL, ui::TEXT, 255, Align::Center);
+  c.text(X0 * 0.5f, 92.f, "peixes", FONT_S, ui::MUTED, 255, Align::Center);
+  float rx = X0 + (float)kW * s + X0 * 0.5f;
+  for (int i = 0; i < kLives; i++) c.heart(rx, 62.f + 30.f * (float)i, 20.f, i < lives_ ? (Color)0xFF5C9A : ui::SURF2);
   if (phase_ == GamePhase::Result) {
     char l1[32], l2[32];
     StrBuf a(l1, sizeof l1); a.put("Peixes: ").num(score_);

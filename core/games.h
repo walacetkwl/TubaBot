@@ -4,7 +4,7 @@
 // - Reflexo / No Tempo Certo: relógio monotônico em ms;
 // - Mergulho (novo na v2): passo fixo de 10 ms, controle por inclinação ou dedo.
 // A lógica dos quatro jogos da v1 é a MESMA (mesmos testes); o desenho foi
-// refeito para a tela colorida: o "mundo" 128×64 da v1 é ampliado 3× (GameView).
+// refeito para a tela colorida: o "mundo" 128×64 da v1 é ampliado 2,4× (GameView, 320×240).
 #pragma once
 #include "gfx.h"
 
@@ -24,13 +24,13 @@ struct GameOutcome {
   int32_t aux2 = 0;        // alvo em cs (tempo certo)
 };
 
-// Mundo lógico 128×64 da v1 -> tela (3×, centralizado).
+// Mundo lógico 128×64 da v1 -> tela 320×240 (2,4×: ocupa a largura toda).
 struct GameView {
-  static const int kScale = 3;
-  static const int kX0 = SCR_CX - 64 * kScale, kY0 = SCR_CY - 32 * kScale;
-  static float X(float lx) { return (float)kX0 + lx * (float)kScale; }
-  static float Y(float ly) { return (float)kY0 + ly * (float)kScale; }
-  static float S(float v) { return v * (float)kScale; }
+  static constexpr float kScale = 2.4f;
+  static constexpr float kX0 = (float)SCR_CX - 64.f * kScale, kY0 = 52.f;
+  static float X(float lx) { return kX0 + lx * kScale; }
+  static float Y(float ly) { return kY0 + ly * kScale; }
+  static float S(float v) { return v * kScale; }
 };
 
 class Game {
@@ -231,8 +231,8 @@ class DiveGame : public Game {
   static const int kCatchDx = 11, kCatchDy = 7;
   static const int kMaxItems = 8;
   static const int kLives = 3;
-  static const int kViewScale = 3;
-  static const int kViewX0 = SCR_CX - kW * kViewScale / 2, kViewY0 = SCR_CY - kH * kViewScale / 2;
+  static const int kViewScaleMilli = 2100;  // 2,1× -> palco 210×210
+  static const int kViewX0 = SCR_CX - kW * kViewScaleMilli / 2000, kViewY0 = SCR_CY - kH * kViewScaleMilli / 2000;
   struct Item { int32_t x, y; int16_t vy; bool jelly, active; };
 
   void begin(ms_t now, Rng* rng, bool easy) override;

@@ -1,10 +1,10 @@
-// Motor gráfico do TubaBot v2: tela redonda 466×466, RGB565, antialiasing.
+// Motor gráfico do TubaBot: tela 2,8" usada em PAISAGEM — interface lógica 320×240
+// (o painel físico 240×320 da ES3C28P é girado 90° pelo firmware). RGB565, antialiasing.
 //
 // - Todas as formas são desenhadas por campo de distância (SDF): bordas suaves
 //   em qualquer tamanho, sem bitmaps.
 // - O canvas registra a área desenhada a cada quadro; o firmware só envia ao
-//   AMOLED a união (quadro anterior ∪ atual), alinhada em pares como o CO5300 exige.
-// - Fundo preto = pixels do AMOLED apagados (economia e contraste máximo).
+//   display a união (quadro anterior ∪ atual), o que mantém o SPI folgado.
 #pragma once
 #include "tb_base.h"
 #include "font.h"
@@ -12,12 +12,10 @@
 
 namespace tb {
 
-static const int SCR_W = 466;
-static const int SCR_H = 466;
-static const int SCR_CX = 233;
-static const int SCR_CY = 233;
-static const int SCR_R = 233;       // raio visível
-static const int SCR_SAFE_R = 212;  // conteúdo importante fica dentro deste raio
+static const int SCR_W = 320;
+static const int SCR_H = 240;
+static const int SCR_CX = 160;
+static const int SCR_CY = 120;
 
 // Cor 0xRRGGBB
 typedef uint32_t Color;
@@ -127,7 +125,9 @@ class Canvas {
 // Mistura um pixel RGB565 com uma cor (alfa 0..256).
 inline void blend565(uint16_t& d, int sr, int sg, int sb, int a) {
   int dr = (d >> 11) & 31, dg = (d >> 5) & 63, db = d & 31;
-  dr += ((sr - dr) * a) >> 8; dg += ((sg - dg) * a) >> 8; db += ((sb - db) * a) >> 8;
+  // arredondamento ao mais próximo (sem desvio de matiz em alfas baixos sobre fundo claro)
+  int ia = 256 - a;
+  dr = (dr * ia + sr * a + 128) >> 8; dg = (dg * ia + sg * a + 128) >> 8; db = (db * ia + sb * a + 128) >> 8;
   d = (uint16_t)((dr << 11) | (dg << 5) | db);
 }
 

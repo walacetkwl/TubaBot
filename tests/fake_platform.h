@@ -19,6 +19,16 @@ struct FakePlatform : public tb::Platform {
   int displayCalls = 0;
   int64_t rtc = 0;
   int rtcWrites = 0;
+  char factory[tb::FACTORY_MAX] = {0};
+  size_t factoryLen = 0;
+
+  // Grava um perfil de fábrica (como o tools/fabrica.py faria na partição "fabrica").
+  void setFactory(tb::Model m, int body, int theme, int expr = -1) {
+    tb::FactoryConfig f; f.model = m; f.body = (uint8_t)body; f.theme = (uint8_t)theme;
+    f.exprColor = (uint8_t)(expr >= 0 ? expr : tb::BODIES[body].exprColor);
+    factoryLen = tb::formatFactory(f, factory, sizeof factory);
+  }
+  void setFactoryText(const char* t) { factoryLen = strlen(t); memcpy(factory, t, factoryLen); }
 
   bool storageLoad(tb::BlobKind k, uint8_t* buf, size_t cap, size_t* len) override {
     int i = (int)k;
@@ -51,4 +61,9 @@ struct FakePlatform : public tb::Platform {
   bool busy() override { return false; }
   void log(const char* m) override { if (!quiet) printf("  [log] %s\n", m); }
   void rtcWrite(int64_t e) override { rtc = e; rtcWrites++; }
+  bool factoryLoad(char* buf, size_t cap, size_t* len) override {
+    *len = 0;
+    if (!factoryLen || factoryLen > cap) return false;
+    memcpy(buf, factory, factoryLen); *len = factoryLen; return true;
+  }
 };
