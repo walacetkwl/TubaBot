@@ -1,10 +1,10 @@
-# TubaBot — atalhos (macOS e Linux). Veja README_MAC.md.
+# TubaBot v2 — atalhos (macOS e Linux). Veja README_MAC.md.
 CXX ?= c++
 CXXFLAGS = -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter -ffp-contract=off -Icore
 CORE = $(wildcard core/*.cpp)
 BUILD = build
 
-.PHONY: test sim simulador screens crosscheck e2e check-fw firmware lite flash monitor portal clean
+.PHONY: test sim simulador screens crosscheck e2e firmware vibra dist flash monitor portal fonts clean
 
 ## Testes nativos do núcleo (Apple clang ou g++)
 test: $(BUILD)/tests
@@ -30,13 +30,18 @@ sim:
 simulador:
 	open simulator/index.html 2>/dev/null || xdg-open simulator/index.html
 
-## Galeria de telas reais (docs/telas.png; requer python3 + Pillow para o PNG)
+## Galeria de telas reais (docs/telas.png; requer python3 + Pillow)
 screens: $(BUILD)/screens
-	./$(BUILD)/screens docs/telas.pbm
-	python3 -c "from PIL import Image, ImageOps; im=ImageOps.invert(Image.open('docs/telas.pbm').convert('L')); im.resize((im.width*2,im.height*2),Image.NEAREST).save('docs/telas.png')" && rm docs/telas.pbm
-$(BUILD)/screens: tools/screens.cpp $(CORE)
+	@rm -rf $(BUILD)/telas && mkdir -p $(BUILD)/telas
+	./$(BUILD)/screens $(BUILD)/telas
+	python3 tools/gallery.py $(BUILD)/telas docs/telas.png
+$(BUILD)/screens: tools/screens.cpp $(CORE) core/*.h
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) tools/screens.cpp $(CORE) -o $@
+	$(CXX) $(CXXFLAGS) -O2 tools/screens.cpp $(CORE) -o $@
+
+## Fontes (core/font_data.cpp) a partir da Nunito
+fonts:
+	python3 tools/gen_fonts.py
 
 ## Teste de ponta a ponta do simulador (Playwright)
 e2e:
@@ -46,11 +51,14 @@ e2e:
 portal:
 	python3 tools/embed_portal.py
 
-## Firmware (PlatformIO)
+## Firmware (PlatformIO + pioarduino / Arduino-ESP32 3.1.3)
 firmware:
 	pio run -e tubabot
-lite:
-	pio run -e tubabot_lite
+vibra:
+	pio run -e tubabot_vibra
+## Binários prontos em firmware/dist (completo = gravar no endereço 0x0; app-ota = atualizar pelo portal)
+dist: firmware vibra
+	./tools/make_dist.sh
 flash:
 	pio run -e $(or $(ENV),tubabot) -t upload $(if $(PORT),--upload-port $(PORT),)
 monitor:

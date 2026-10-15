@@ -1,0 +1,4 @@
+e558a59950546b52ae17ca91097ebfbb22773de5c3dc17c2191a68a42db16a29  tubabot-v2.0.0-app-ota.bin
+9ee7f9940b05a120d1f4208ea0bdfec20ec3ca381968d308920769afd44bd10d  tubabot-v2.0.0-completo.bin
+d2adc296c2427dd9ff1022f5085c3fb011e724677d75fad6cca0b087cb3a85e5  tubabot_vibra-v2.0.0-app-ota.bin
+06fb1314efe3d1188e1328aca27646245e9504ce1b3dae49e91d48f433e2f782  tubabot_vibra-v2.0.0-completo.bin

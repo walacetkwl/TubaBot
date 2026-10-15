@@ -1,8 +1,9 @@
-# Partições do TubaBot para flash de 4 MB (sem PSRAM).
-# Duas partições de app para OTA local + NVS para preferências/progresso.
-# Name,   Type, SubType,  Offset,   Size
-nvs,      data, nvs,      0x9000,   0x5000,
-otadata,  data, ota,      0xe000,   0x2000,
-app0,     app,  ota_0,    0x10000,  0x1E0000,
-app1,     app,  ota_1,    0x1F0000, 0x1E0000,
-coredump, data, coredump, 0x3D0000, 0x10000,
+# TubaBot v2 — 16 MB de flash (ESP32-S3R8 da Waveshare AMOLED 1.75)
+# Offsets padrão do Arduino-ESP32 (bootloader 0x0, tabela 0x8000, otadata 0xe000, app 0x10000).
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x5000
+otadata,  data, ota,     0xe000,   0x2000
+app0,     app,  ota_0,   0x10000,  0x400000
+app1,     app,  ota_1,   0x410000, 0x400000
+spiffs,   data, spiffs,  0x810000, 0x7E0000
+coredump, data, coredump,0xFF0000, 0x10000

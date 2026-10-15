@@ -8,7 +8,8 @@
 #include <esp_ota_ops.h>
 #include <time.h>
 #include "board_profile.h"
-#include "hw_io.h"
+#include <HTTPClient.h>
+#include <NetworkClientSecure.h>
 #include "portal_gz.h"
 
 using namespace tb;
@@ -44,8 +45,8 @@ void EspPlatform::storageErase(BlobKind k) {
 }
 
 // ── identidade da rede própria ──────────────────────────────────────────────
-void EspPlatform::begin(Oled* oled) {
-  oled_ = oled;
+void EspPlatform::begin(Display* screen, Sensors* sensors) {
+  screen_ = screen; sensors_ = sensors;
   uint8_t mac[6];
   WiFi.macAddress(mac);
   snprintf(ssid_, sizeof ssid_, "TubaBot-%02X%02X", mac[4], mac[5]);
@@ -159,13 +160,14 @@ void EspPlatform::netStatus(NetStatus& s) {
 
 void EspPlatform::sysInfo(SysInfo& s) {
   s = SysInfo();
-  s.heapFree = ESP.getFreeHeap(); s.heapMin = ESP.getMinFreeHeap();
+  s.heapFree = ESP.getFreeHeap(); s.heapMin = ESP.getMinFreeHeap(); s.psramFree = ESP.getFreePsram();
   s.flashSize = ESP.getFlashChipSize(); s.sketchSize = ESP.getSketchSize(); s.sketchFree = ESP.getFreeSketchSpace();
   snprintf(s.chip, sizeof s.chip, "%s rev%d", ESP.getChipModel(), ESP.getChipRevision());
   snprintf(s.build, sizeof s.build, "%s %s", TB_ENV_NAME, __DATE__);
 }
 
-void EspPlatform::applyDisplay(uint8_t c, bool r) { if (oled_) { oled_->setContrast(c); oled_->setRotation180(r); } }
+void EspPlatform::applyDisplay(uint8_t b, bool r) { if (screen_) screen_->setBrightness(b); rotate_ = r; }
+void EspPlatform::rtcWrite(int64_t epoch) { if (sensors_) sensors_->rtcWrite(epoch); }
 void EspPlatform::setTimezone(const char* posix) { setenv("TZ", posix, 1); tzset(); }
 void EspPlatform::log(const char* msg) { Serial.printf("[%8lu] %s\n", (unsigned long)millis(), msg); }
 
@@ -191,7 +193,10 @@ void EspPlatform::handleCaptive() {
 }
 
 void EspPlatform::handleApi() {
-  static char out[8192];
+  // 64 KB na PSRAM: cabe a miniatura da tela (/api/frame) e o status completo
+  static char* out = (char*)ps_malloc(65536);
+  static const size_t outCap = out ? 65536 : 0;
+  if (!out) { server.send(500, "application/json", "{\"ok\":false,\"error\":\"sem memória\"}"); return; }
   apActivityAt_ = millis();
   if (server.clientContentLength() > TB_HTTP_MAX_BODY) { server.send(413, "application/json", "{\"ok\":false,\"error\":\"corpo grande demais\"}"); return; }
   // Origem: navegadores enviam Origin em POST; deve ser este mesmo aparelho.
@@ -201,7 +206,7 @@ void EspPlatform::handleApi() {
   String body = server.hasArg("plain") ? server.arg("plain") : String();
   String token = server.header("X-Tuba-Token");
   ApiCtx ctx; ctx.viaAP = requestViaAP(); ctx.devTools = false; ctx.token = token.c_str();
-  StrBuf sb(out, sizeof out);
+  StrBuf sb(out, outCap);
   int code = app_->api(method, server.uri().c_str(), body.c_str(), body.length(), ctx, sb, nowMs());
   server.sendHeader("Cache-Control", "no-store");
   server.send(code, "application/json; charset=utf-8", out);
@@ -221,16 +226,16 @@ void EspPlatform::handleUpdateChunk() {
     if (!Update.begin(otaTotal_, U_FLASH)) { strlcpy(otaErr_, Update.errorString(), sizeof otaErr_); otaActive_ = false; return; }
   } else if (up.status == UPLOAD_FILE_WRITE && otaActive_ && !otaErr_[0]) {
     if (otaWritten_ == 0) {
-      // valida a imagem: magic 0xE9 e chip ESP32-C3 (id 5 no cabeçalho estendido)
-      if (up.currentSize < 16 || up.buf[0] != 0xE9 || up.buf[12] != 0x05 || up.buf[13] != 0x00) {
-        strlcpy(otaErr_, "arquivo não é firmware para ESP32-C3", sizeof otaErr_); Update.abort(); otaActive_ = false; return;
+      // valida a imagem: magic 0xE9 e chip ESP32-S3 (id 9 no cabeçalho estendido)
+      if (up.currentSize < 16 || up.buf[0] != 0xE9 || up.buf[12] != 0x09 || up.buf[13] != 0x00) {
+        strlcpy(otaErr_, "arquivo não é firmware para ESP32-S3", sizeof otaErr_); Update.abort(); otaActive_ = false; return;
       }
     }
     if (Update.write(up.buf, up.currentSize) != up.currentSize) { strlcpy(otaErr_, Update.errorString(), sizeof otaErr_); Update.abort(); otaActive_ = false; return; }
     otaWritten_ += up.currentSize;
     // a requisição é tratada de forma síncrona: atualiza o visor daqui mesmo
     app_->otaProgress((int)(otaWritten_ * 1000 / (otaTotal_ ? otaTotal_ : 1)));
-    if (app_->tick(nowMs()) && oled_) oled_->push(app_->frame().buf);
+    if (app_->tick(nowMs()) && screen_) screen_->push(app_->canvas().pixels(), app_->dirty(), rotate_);
   } else if (up.status == UPLOAD_FILE_END && otaActive_ && !otaErr_[0]) {
     if (otaWritten_ != otaTotal_) { strlcpy(otaErr_, "tamanho recebido diferente do anunciado", sizeof otaErr_); Update.abort(); }
     else if (!Update.end(true)) strlcpy(otaErr_, Update.errorString(), sizeof otaErr_);
@@ -269,9 +274,48 @@ void EspPlatform::setupServer() {
   });
 }
 
+// ── clima: GET HTTPS numa tarefa própria (o laço da tela nunca espera a rede) ──
+static char wUrl[512];
+static char* wBody = nullptr;
+static volatile int wState = 0;   // 0 livre, 1 pedido, 2 resposta pronta
+static volatile int wCode = 0;
+static volatile size_t wLen = 0;
+static void weatherTask(void*) {
+  for (;;) {
+    if (wState != 1) { vTaskDelay(pdMS_TO_TICKS(200)); continue; }
+    NetworkClientSecure cli;
+    // Dados públicos de previsão; a resposta passa pelo validador JSON do núcleo.
+    // (Certificado não fixado: a CA do Open-Meteo pode mudar sem aviso — ver docs/FUNCIONALIDADES.md.)
+    cli.setInsecure();
+    HTTPClient http;
+    http.setTimeout(8000);
+    int code = 0; size_t n = 0;
+    if (http.begin(cli, wUrl)) {
+      code = http.GET();
+      if (code == 200) {
+        WiFiClient* st = http.getStreamPtr();
+        uint32_t t0 = millis();
+        while ((http.connected() || st->available()) && n < 8191 && millis() - t0 < 8000) {
+          int a = st->available();
+          if (a <= 0) { delay(5); continue; }
+          n += st->readBytes(wBody + n, min((size_t)a, (size_t)8191 - n));
+        }
+      }
+      http.end();
+    }
+    wBody[n] = 0; wLen = n; wCode = code; wState = 2;
+  }
+}
+
+void EspPlatform::weatherLoop(uint64_t now) {
+  if (!wBody) { wBody = (char*)ps_malloc(8192); if (!wBody) return; xTaskCreatePinnedToCore(weatherTask, "tb_weather", 8192, nullptr, 1, nullptr, 0); }
+  if (wState == 2) { app_->weatherResult(wBody, wLen, wCode, now); wState = 0; }
+  if (wState == 0 && app_->weatherWant(now, wUrl, sizeof wUrl)) wState = 1;
+}
+
 // ── laço ────────────────────────────────────────────────────────────────────
 void EspPlatform::loop(uint64_t now) {
-  (void)now;
+  if (app_) weatherLoop(now);
   if (apActive_) dns.processNextRequest();
   if (serverStarted_) server.handleClient();
   uint32_t ms = millis();
