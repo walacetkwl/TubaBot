@@ -87,7 +87,7 @@ void defaultSettings(Settings& s) {
   s.rotate180 = 0;
   s.favoriteExpr = 0;
   s.animLevel = 1;
-  s.screenOffS = 300;
+  s.screenOffS = 0;   // padrão: a tela nunca apaga (o Tuba fica na mesa sempre aceso)
   s.shortIntro = 0;
   s.sound = 1; s.silent = 0; s.vibration = 1;
   s.pomoFocusMin = 25; s.pomoShortMin = 5; s.pomoLongMin = 15; s.pomoCyclesBeforeLong = 4; s.pomoAutoStart = 0;
@@ -121,6 +121,9 @@ void defaultSettings(Settings& s) {
   s.weatherLatE4 = CITY_TABLE[0].latE4; s.weatherLonE4 = CITY_TABLE[0].lonE4;
   s.theme = 0;
   s.showClock = 0; s.showWeather = 0; s.showBattery = 0;
+  s.language = 0;
+  s.noTelemetry = 0;
+  s.updSnoozes = 0; s.updAuto = 0; s.updVersion[0] = 0; s.updDueMin = 0;
 }
 
 void defaultProgress(Progress& p) {
@@ -187,6 +190,16 @@ void sanitizeSettings(Settings& s) {
   clampField<int32_t>(s.weatherLonE4, -1800000, 1800000, d.weatherLonE4);
   s.theme = s.theme ? 1 : 0;
   s.showClock = s.showClock ? 1 : 0; s.showWeather = s.showWeather ? 1 : 0; s.showBattery = s.showBattery ? 1 : 0;
+  clampField<uint8_t>(s.language, 0, 2, 0);
+  s.noTelemetry = s.noTelemetry ? 1 : 0;
+  s.updVersion[sizeof s.updVersion - 1] = 0;
+  for (int i = 0; s.updVersion[i]; i++) {   // só "1.2.3" (dígitos e pontos)
+    char ch = s.updVersion[i];
+    if (!((ch >= '0' && ch <= '9') || ch == '.')) { s.updVersion[0] = 0; s.updDueMin = 0; break; }
+  }
+  s.updAuto = s.updAuto ? 1 : 0;
+  if (!s.updVersion[0]) { s.updDueMin = 0; s.updSnoozes = 0; s.updAuto = 0; }
+  if (s.updSnoozes > 50) s.updSnoozes = 50;
 }
 
 size_t encodeBlob(BlobKind k, uint8_t ver, const void* payload, size_t len, uint8_t* out, size_t cap) {

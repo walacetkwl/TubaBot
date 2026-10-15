@@ -24,7 +24,9 @@ struct Note {
 enum class Sound : uint8_t {
   None = 0, Boot, Tap, Double, Boop, Purr, Love, Menu, TimerDone, PomodoroDone, Reminder, Alarm,
   GamePoint, GameOver, Record, Unlock, Giggle, Dizzy, Startled, Yawn, Babble, Swipe, Charge, LowBattery,
-  Breath, Test, Count
+  Breath, Test,
+  // reações lendárias (v3.1)
+  Legend, Nom, Slurp, Sip, Hum, Count
 };
 
 class Synth {

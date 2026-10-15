@@ -1185,12 +1185,20 @@ TEST(factory_profile_from_python_tool) {
   const char* t =
     "TUBABOT-FABRICA 1\nmodelo=pro\ncor=vermelho\nexpressao=vermelho\ntema=claro\nvolume=60\nbrilho=80\n"
     "personalidade=tranquilo\nmostrar_hora=0\nmostrar_clima=0\nmostrar_bateria=0\nformato_24h=1\n"
-    "fuso=America/Sao_Paulo\nserie=TB-0001\ncrc=E7293584\n";
+    "fuso=America/Sao_Paulo\nidioma=es-419\ntelemetria=1\nserie=TB-0001\ncrc=83967DF6\n";
   FactoryConfig f; const char* why = nullptr;
   CHECK(parseFactory(t, strlen(t), f, &why)); CHECK(why == nullptr);
   CHECK(f.model == Model::Pro); CHECK_EQ(f.body, 0); CHECK_EQ(f.theme, 1); CHECK(strcmp(f.serial, "TB-0001") == 0);
+  CHECK_EQ(f.language, (int)Lang::Es); CHECK_EQ(f.telemetry, 1);
   char again[FACTORY_MAX]; size_t n = formatFactory(f, again, sizeof again);
   CHECK(n == strlen(t) && memcmp(again, t, n) == 0);   // mesmo texto, byte a byte
+  // perfil da v3.0 (sem idioma/telemetria) continua válido: português e telemetria ligada
+  const char* old =
+    "TUBABOT-FABRICA 1\nmodelo=pro\ncor=vermelho\nexpressao=vermelho\ntema=claro\nvolume=60\nbrilho=80\n"
+    "personalidade=tranquilo\nmostrar_hora=0\nmostrar_clima=0\nmostrar_bateria=0\nformato_24h=1\n"
+    "fuso=America/Sao_Paulo\nserie=TB-0001\ncrc=E7293584\n";
+  FactoryConfig g;
+  CHECK(parseFactory(old, strlen(old), g, &why)); CHECK_EQ(g.language, 0); CHECK_EQ(g.telemetry, 1);
 }
 
 TEST(factory_defaults_first_boot_and_restore) {
@@ -1300,6 +1308,218 @@ TEST(theme_switch_repaints_and_inactivity_returns_to_face) {
   CHECK(h.app->screen() == Screen::ScreenOff);
   h.app->hwButton(HwButton::Boot, false, h.t); h.run(100);
   CHECK(h.app->screen() == Screen::Face);
+}
+
+
+// ════════ v3.1: idiomas, lendárias, atualização, telemetria ════════
+TEST(i18n_language_switch_and_table) {
+  // tabela: sem chaves repetidas e tradução estável (o desenho passa por tr() duas vezes)
+  for (int i = 0; i < trTableSize(); i++)
+    for (int j = i + 1; j < trTableSize(); j++) CHECK(strcmp(trTablePt(i), trTablePt(j)) != 0);
+  for (int l = 1; l < (int)Lang::Count; l++) {
+    setLang((Lang)l);
+    for (int i = 0; i < trTableSize(); i++) { const char* a = tr(trTablePt(i)); CHECK(strcmp(tr(a), a) == 0); }
+  }
+  setLang(Lang::En); CHECK(strcmp(tr("Jogos"), "Games") == 0);
+  setLang(Lang::Es); CHECK(strcmp(tr("Jogos"), "Juegos") == 0);
+  setLang(Lang::Pt); CHECK(strcmp(tr("Jogos"), "Jogos") == 0);
+  CHECK(langFromKey("es-419") == Lang::Es); CHECK(langFromKey("en-US") == Lang::En); CHECK(langFromKey("pt-BR") == Lang::Pt);
+  CHECK(langFromKey("fr") == Lang::Count);
+  H h; h.skipIntro();
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"language\":\"es-419\"}", r, h.t), 200);
+  CHECK_EQ(h.app->settings().language, (int)Lang::Es);
+  CHECK(lang() == Lang::Es);
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"language\":\"klingon\"}", r, h.t), 422);
+  h.run(5000); h.reboot(); h.skipIntro();
+  CHECK(lang() == Lang::Es);   // persiste
+  // a tela Menu inteira em espanhol: nenhum texto com letras fica sem tradução
+  static std::vector<std::string> miss; miss.clear();
+  g_trMiss = [](const char* t) { for (const char* p = t; *p; p++) if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')) { miss.push_back(t); return; } };
+  h.app->gotoScreen(Screen::Launcher, h.t); h.run(600);
+  h.app->gotoScreen(Screen::System, h.t); h.run(600);
+  g_trMiss = nullptr;
+  for (auto& m : miss) printf("  sem tradução: %s\n", m.c_str());
+  CHECK(miss.empty());
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"language\":\"pt-BR\"}", r, h.t), 200);
+  CHECK(lang() == Lang::Pt);
+}
+
+TEST(i18n_factory_default_language) {
+  H h(fullCaps(), false);
+  h.plat.setFactoryText(
+    "TUBABOT-FABRICA 1\nmodelo=pro\ncor=vermelho\nexpressao=vermelho\ntema=claro\nvolume=60\nbrilho=80\n"
+    "personalidade=tranquilo\nmostrar_hora=0\nmostrar_clima=0\nmostrar_bateria=0\nformato_24h=1\n"
+    "fuso=America/Sao_Paulo\nidioma=es-419\ntelemetria=1\nserie=TB-0001\ncrc=83967DF6\n");
+  h.plat.storageErase(BlobKind::Settings);
+  h.reboot();
+  CHECK_EQ(h.app->settings().language, (int)Lang::Es);
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"language\":\"en\",\"setupDone\":true}", r, h.t), 200);
+  h.app->factoryReset(h.t); h.reboot();
+  CHECK_EQ(h.app->settings().language, (int)Lang::Es);   // restaurar volta ao idioma DE FÁBRICA da unidade
+  setLang(Lang::Pt);
+}
+
+static int64_t localMidnight(int64_t utcEpochDay) { return utcEpochDay * 86400 + 3 * 3600; }  // Brasília (UTC-3)
+
+// Simula dias inteiros com alguém por perto (toques a cada 20 min, das 7h às 23h).
+static int simulateDays(H& h, int days, std::vector<int>& perDay, bool& tapTriggered) {
+  int total = 0;
+  bool was = false;
+  for (int d = 0; d < days; d++) {
+    h.app->setTime(localMidnight(20740 + d), h.t);
+    int count = 0;
+    ms_t lastTap = h.t;
+    for (int m = 0; m < 1440; m++) {
+      if (m >= 7 * 60 && m < 23 * 60 && m % 20 == 0) { h.tap(); lastTap = h.t; }
+      h.t += 60000; h.app->setTime(localMidnight(20740 + d) + (int64_t)(m + 1) * 60, h.t); h.tick();
+      bool now = h.app->sceneActive();
+      if (now && !was) { count++; if (h.t - lastTap < 30000) tapTriggered = true; }
+      was = now;
+      if (now) { h.run(10000, 200); was = h.app->sceneActive(); }
+    }
+    perDay.push_back(count);
+    total += count;
+  }
+  return total;
+}
+
+TEST(legendary_rare_never_by_taps_max_one_per_day) {
+  {
+    H h; h.skipIntro();
+    std::vector<int> perDay; bool tapTrig = false;
+    CHECK_EQ(simulateDays(h, 3, perDay, tapTrig), 0);   // sem afinidade: nada de lendárias
+  }
+  H h; h.skipIntro();
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/action", "{\"action\":\"dev.bond\",\"bond\":1000}", r, h.t), 200);
+  std::vector<int> perDay; bool tapTrig = false;
+  int total = simulateDays(h, 10, perDay, tapTrig);
+  int daysWith = 0;
+  for (int c : perDay) { CHECK(c <= 1); if (c) daysWith++; }
+  CHECK(total >= 1);
+  CHECK(daysWith < 10);          // não aparece todos os dias
+  CHECK(!tapTrig);               // nunca logo depois de um toque
+  CHECK(h.app->legendsSeen() >= 1);
+}
+
+TEST(legendary_medal_collection_and_replay) {
+  H h; h.skipIntro();
+  h.app->setTime(localMidnight(20740) + 9 * 3600, h.t);   // 9h: manhã (café possível)
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/action", "{\"action\":\"legend.play\",\"scene\":\"joinha\",\"discover\":true}", r, h.t), 200);
+  CHECK(h.app->sceneActive());
+  CHECK(h.app->sceneId() == SceneId::Joinha);
+  h.run(3300, 20);
+  CHECK(!h.app->sceneActive());
+  CHECK(h.app->medalVisible(h.t));                    // primeira vez: medalha
+  CHECK_EQ(h.app->legendsSeen(), 1);
+  h.run(4500, 20);
+  CHECK(!h.app->medalVisible(h.t));
+  // coleção mostra a descoberta e quantas secretas faltam; tocar repete
+  h.app->gotoScreen(Screen::Legends, h.t); h.run(300);
+  CHECK(h.app->listIndexOf(L_LEGEND0 + (int)SceneId::Joinha) >= 0);
+  CHECK(h.app->listIndexOf(L_LEGEND_LOCKED) >= 0);
+  CHECK(h.pick(L_LEGEND0 + (int)SceneId::Joinha));
+  CHECK(h.app->sceneActive() && h.app->screen() == Screen::Face);
+  h.run(3400, 20);
+  CHECK(h.app->screen() == Screen::Legends);          // volta para a coleção
+  CHECK(!h.app->medalVisible(h.t));                   // repetição não dá medalha
+  // tocar no rosto durante a cena encerra (não dispara outra reação)
+  h.app->gotoScreen(Screen::Face, h.t); h.run(300);
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/action", "{\"action\":\"legend.play\",\"scene\":\"joinha\"}", r, h.t), 200);
+  h.run(500); h.tap();
+  CHECK(!h.app->sceneActive());
+  // sem ferramentas de desenvolvedor não dá para pedir uma secreta
+  char buf[512]; StrBuf sb(buf, sizeof buf); ApiCtx ctx; ctx.token = h.app->sessionToken(); ctx.devTools = false;
+  const char* body = "{\"action\":\"legend.play\",\"scene\":\"escada\"}";
+  CHECK_EQ(h.app->api("POST", "/api/action", body, strlen(body), ctx, sb, h.t), 422);
+  CHECK_EQ(apiCall(*h.app, "GET", "/api/legends", nullptr, r, h.t), 200);
+  CHECK(r.find("\"seen\":1") != std::string::npos);
+}
+
+TEST(update_offer_snooze_never_ignored_and_install) {
+  H h; h.skipIntro();
+  h.plat.manifestUrl = "https://exemplo.invalid/tubabot/stable.json";
+  h.plat.staConfigured = true; h.plat.staConnected = true;
+  char url[256];
+  bool want = false;
+  for (int i = 0; i < 400 && !want; i++) { h.run(100); want = h.app->updateWant(h.t, url, sizeof url); }
+  CHECK(want);
+  CHECK(strstr(url, "fw=3.1.0") != nullptr);
+  const char* same = "{\"version\":\"3.1.0\"}";
+  h.app->updateManifest(same, strlen(same), 200, h.t);
+  h.run(500);
+  CHECK(h.app->screen() == Screen::Face);             // em dia: nada a perguntar
+  const char* m = "{\"version\":\"9.0.0\",\"url\":\"https://exemplo.invalid/fw.bin\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"size\":1500000,\"notes\":{\"pt-BR\":\"Novas reações\"}}";
+  h.app->updateManifest(m, strlen(m), 200, h.t);
+  h.run(4000);
+  CHECK(h.app->screen() == Screen::UpdateOffer);
+  CHECK(strcmp(h.app->pendingUpdate(), "9.0.0") == 0);
+  h.swipe(200, 0);                                    // não dá para fechar deslizando
+  CHECK(h.app->screen() == Screen::UpdateOffer);
+  for (int k = 0; k < 3; k++) {
+    CHECK(h.press(B_UPD_LATER));
+    CHECK(h.app->screen() != Screen::UpdateOffer);
+    h.run(3630000, 1000);
+    CHECK(h.app->screen() == Screen::UpdateOffer);   // volta a perguntar
+  }
+  int x, y;
+  h.tick();
+  CHECK(!h.app->buttonPos(B_UPD_LATER, x, y));       // depois de 3 adiamentos: só agora ou esta noite
+  h.run(61000, 500);                                  // sem resposta: vira "esta noite" (nunca some)
+  CHECK(h.app->screen() != Screen::UpdateOffer);
+  CHECK(h.app->settings().updAuto == 1);
+  // persistente: religou sem instalar -> continua pendente e busca o manifesto de novo
+  h.run(3000); h.reboot(); h.skipIntro();
+  CHECK(strcmp(h.app->pendingUpdate(), "9.0.0") == 0);
+  // na hora agendada (sem relógio: 6 h) instala sozinho, se ninguém estiver usando
+  h.app->updateManifest(m, strlen(m), 200, h.t);
+  char u2[200], sha[70]; uint32_t sz = 0; bool inst = false;
+  for (int i = 0; i < 400 && !inst; i++) { h.run(60000, 1000); inst = h.app->updateInstallWant(u2, sizeof u2, sha, sizeof sha, &sz); }
+  CHECK(inst);
+  CHECK(strcmp(u2, "https://exemplo.invalid/fw.bin") == 0 && sz == 1500000 && strlen(sha) == 64);
+  CHECK(versionCompare("3.10.0", "3.9.9") > 0); CHECK(versionCompare("3.1", "3.1.0") == 0); CHECK(versionCompare("2.9.9", "3.0.0") < 0);
+}
+
+TEST(telemetry_payload_and_opt_out) {
+  H h; h.skipIntro();
+  h.tap(); h.tap();
+  std::string r;
+  CHECK_EQ(apiCall(*h.app, "GET", "/api/telemetry", nullptr, r, h.t), 200);
+  CHECK(r.find("\"model\":\"pro\"") != std::string::npos);
+  CHECK(r.find("\"deviceId\":\"AABBCCDDEEFF\"") != std::string::npos);
+  CHECK(r.find("\"interactedToday\":true") != std::string::npos);
+  CHECK(r.find("nickname") == std::string::npos);     // nada pessoal
+  char url[200], b[2048];
+  { StrBuf body(b, sizeof b); CHECK(!h.app->telemetryWant(h.t, url, sizeof url, body)); }   // sem servidor
+  h.plat.telemetryUrl = "https://exemplo.invalid/t";
+  h.plat.staConfigured = true; h.plat.staConnected = true;
+  bool sent = false;
+  for (int i = 0; i < 200 && !sent; i++) { h.run(100); StrBuf body(b, sizeof b); sent = h.app->telemetryWant(h.t, url, sizeof url, body); }
+  CHECK(sent);
+  CHECK(strstr(b, "\"activated\":true") != nullptr);
+  CHECK_EQ(apiCall(*h.app, "POST", "/api/prefs", "{\"telemetry\":false}", r, h.t), 200);
+  bool again = false;
+  for (int i = 0; i < 100 && !again; i++) { h.run(20000, 1000); StrBuf body(b, sizeof b); again = h.app->telemetryWant(h.t, url, sizeof url, body); }
+  CHECK(!again);
+}
+
+TEST(bedtime_random_between_20_and_2230) {
+  H h; h.skipIntro();
+  int sleepyAt19 = 0, sleepyAt23 = 0;
+  for (int d = 0; d < 6; d++) {
+    h.app->setTime(localMidnight(20750 + d) + 19 * 3600, h.t); h.run(200);
+    std::string r;
+    apiCall(*h.app, "GET", "/api/status", nullptr, r, h.t);
+    h.app->setTime(localMidnight(20750 + d) + 23 * 3600, h.t);
+    for (int k = 0; k < 4; k++) { h.t += 100000; h.tick(); }
+    if (h.app->baseExpr() == Expr::Sleepy) sleepyAt23++;
+  }
+  CHECK(sleepyAt23 >= 5);
+  (void)sleepyAt19;
+  CHECK_EQ(h.app->settings().screenOffS, 0);          // padrão: a tela nunca apaga
 }
 
 int main(int argc, char** argv) {

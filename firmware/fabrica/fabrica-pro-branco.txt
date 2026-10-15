@@ -11,4 +11,6 @@ mostrar_clima=0
 mostrar_bateria=0
 formato_24h=1
 fuso=America/Sao_Paulo
-crc=2551A8CE
+idioma=pt-BR
+telemetria=1
+crc=DA68E849

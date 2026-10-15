@@ -39,6 +39,8 @@ enum class Pattern : uint8_t {
   TestShort,
   // novos na v2
   Alarm, Boop, Giggle, Dizzy, Startled, Yawn, Babble, Swipe, Charge, LowBattery, Breath,
+  // novos na v3.1 (reações lendárias)
+  Legend, Nom, Slurp, Sip, Hum,
   Count
 };
 const char* patternName(Pattern p);

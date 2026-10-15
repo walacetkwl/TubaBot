@@ -40,6 +40,12 @@ static const Note S_CHARGE[] = {N(C5,90,Sine,60,0), N(G5,90,Sine,60,0), N(C6,180
 static const Note S_LOWBAT[] = {N(E5,180,Triangle,60,0), N(C5,320,Triangle,60,-60), END};
 static const Note S_BREATH[] = {N(220,500,Sine,40,30), END};
 static const Note S_TEST[] = {N(1000,150,Sine,70,0), END};
+static const Note S_LEGEND[] = {N(G5,90,Triangle,60,0), N(C6,90,Triangle,60,0), N(E6,90,Triangle,65,0), N(G6,140,Triangle,70,0), R(50),
+                                N(E6,90,Sine,60,0), N(G6,90,Sine,60,0), N(C7,320,Sine,70,240), END};
+static const Note S_NOM[] = {N(300,60,Square,45,-120), R(60), N(320,60,Square,45,-120), R(60), N(280,80,Square,40,-140), END};
+static const Note S_SLURP[] = {N(500,140,Triangle,45,700), N(1300,60,Sine,35,-300), END};
+static const Note S_SIP[] = {N(1800,70,Noise,14,0), R(50), N(1800,90,Noise,12,0), N(600,160,Sine,40,-150), END};
+static const Note S_HUM[] = {N(147,700,Sine,40,0), N(147,700,Sine,35,4), END};
 
 #undef N
 #undef R
@@ -52,6 +58,7 @@ static const SoundDef DEFS[(int)Sound::Count] = {
   {S_TIMER, 3}, {S_POMO, 3}, {S_REMIND, 2}, {S_ALARM, 40},
   {S_POINT, 1}, {S_OVER, 1}, {S_RECORD, 1}, {S_UNLOCK, 1}, {S_GIGGLE, 1}, {S_DIZZY, 1}, {S_STARTLED, 1},
   {S_YAWN, 1}, {nullptr, 1} /* babble: gerado */, {S_SWIPE, 1}, {S_CHARGE, 1}, {S_LOWBAT, 1}, {S_BREATH, 1}, {S_TEST, 1},
+  {S_LEGEND, 1}, {S_NOM, 1}, {S_SLURP, 1}, {S_SIP, 1}, {S_HUM, 1},
 };
 
 int Synth::channelOf(Sound s) {

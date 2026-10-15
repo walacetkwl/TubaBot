@@ -66,7 +66,7 @@ details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top
   </div>
 </div>
 <div class="panel">
-  <div class="tabs" id="tabs"><button data-p="fab" class="on">Fábrica</button><button data-p="ctl">Controle</button><button data-p="sens">Som</button><button data-p="pwr">Energia</button><button data-p="time">Tempo</button><button data-p="fail">Falhas</button><button data-p="portal">Portal</button><button data-p="log">Eventos</button></div>
+  <div class="tabs" id="tabs"><button data-p="fab" class="on">Fábrica</button><button data-p="leg">Reações</button><button data-p="upd">Atualização</button><button data-p="ctl">Controle</button><button data-p="sens">Som</button><button data-p="pwr">Energia</button><button data-p="time">Tempo</button><button data-p="fail">Falhas</button><button data-p="portal">Portal</button><button data-p="log">Eventos</button></div>
   <div class="pane on" id="p-fab">
     <h3>Perfil de fábrica desta unidade</h3>
     <p class="note">É o que gravamos na bancada (partição <code>fabrica</code>) antes de entregar cada TubaBot. O usuário não muda o modelo nem a cor física; tema e cor das expressões são só os <b>padrões</b>, que ele personaliza depois.</p>
@@ -75,6 +75,7 @@ details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top
       <label for="fBody">Cor física</label><select id="fBody"><option value="vermelho">Vermelho</option><option value="azul">Azul</option><option value="branco">Branco</option><option value="grafite">Grafite / preto</option></select>
       <label for="fExpr">Cor das expressões</label><select id="fExpr"><option value="">igual à cor física</option><option value="vermelho">Vermelho</option><option value="azul">Azul</option><option value="branco">Branco</option><option value="grafite">Grafite</option><option value="ciano">Ciano</option><option value="verde">Verde</option><option value="lilas">Lilás</option><option value="rosa">Rosa</option><option value="amarelo">Amarelo</option><option value="laranja">Laranja</option></select>
       <label for="fTheme">Tema padrão</label><select id="fTheme"><option value="escuro">Escuro</option><option value="claro">Claro</option></select>
+      <label for="fLang">Idioma inicial</label><select id="fLang"><option value="pt-BR">Português (Brasil)</option><option value="en">English</option><option value="es-419">Español (Latinoamérica)</option></select>
       <label for="fSerial">Série (opcional)</label><input type="text" id="fSerial" maxlength="23" placeholder="TB-2026-000123">
     </div>
     <p style="margin-top:12px"><button class="btn pri" id="fWrite">Gravar perfil e reiniciar como unidade nova</button><button class="btn" id="fKeep">Gravar perfil mantendo os dados</button></p>
@@ -82,7 +83,36 @@ details{border:1px dashed #2f4170;border-radius:12px;padding:8px 12px;margin-top
     <h3>Texto gravado (o mesmo do <code>tools/fabrica.py</code>)</h3>
     <pre class="fab" id="fText"></pre>
   </div>
+  <div class="pane" id="p-leg">
+    <h3>Reações lendárias</h3>
+    <p class="note">No aparelho elas <b>não</b> podem ser pedidas: aparecem sozinhas, raramente (no máximo uma por dia, nem todo dia), quando há alguém por perto e a afinidade é suficiente. Aqui você pode ver cada uma. "Descobrir" mostra como seria a primeira vez (com a medalha) usando um perfil de TESTE, sem mexer no progresso real.</p>
+    <div id="legBtns"></div>
+    <h3>Simular as regras naturais</h3>
+    <div class="grid2">
+      <label for="bond">Afinidade (teste)</label><span><input type="range" id="bond" min="0" max="1000" value="500"> <span id="bondv">500</span></span>
+    </div>
+    <p><button class="btn" id="bondSet">Aplicar afinidade</button><button class="btn pri" id="legNow">Dia lendário agora (sorteio natural)</button></p>
+    <p class="note">"Dia lendário agora" roda o sorteio do aparelho como se hoje fosse um dia lendário: respeita afinidade, horário (café só de manhã, bocejo à noite) e prefere as ainda não vistas. "Que barulho!" aparece com um <b>barulho alto</b> (aba Som).</p>
+    <h3>Outras animações</h3>
+    <button class="btn" id="introAgain">Rever a abertura</button>
+    <button class="btn" id="night">Ir para 20:30 (fica sonolento)</button>
+    <button class="btn" id="morning">Ir para 08:00 (manhã)</button>
+    <button class="btn" id="tubaClock">Relógio "Tuba" animado</button>
+    <button class="btn" id="openLegends">Abrir a coleção Lendárias</button>
+  </div>
+  <div class="pane" id="p-upd">
+    <h3>Servidor de atualizações (simulado)</h3>
+    <p class="note">O aparelho consulta o manifesto da TubaLabs ao conectar no Wi-Fi de casa, a cada 6 h e em "Buscar atualizações". Havendo versão nova, avisa na tela: <b>Agora</b>, <b>Em 1 hora</b> (até 3 vezes) ou <b>Esta noite</b> (instala sozinho às 3h). Não há "ignorar"; sem resposta em 60 s, vira "mais tarde".</p>
+    <p><button class="btn" id="homeWifi">Conectar Wi-Fi de casa (simulado)</button><span class="pill" id="wifiState"></span></p>
+    <p><button class="btn pri" id="publish">Publicar v3.2.0 no servidor</button><button class="btn" id="unpublish">Retirar publicação</button><button class="btn" id="checkNow">Buscar atualizações agora</button></p>
+    <pre class="fab" id="updState"></pre>
+    <h3>Telemetria (painel da TubaLabs)</h3>
+    <p class="note">O que o aparelho enviaria a cada 10 min quando conectado (sem dados pessoais). O usuário desliga em Sistema → Estatísticas anônimas.</p>
+    <pre class="fab" id="telState"></pre>
+  </div>
   <div class="pane" id="p-ctl">
+    <h3>Idioma do aparelho</h3>
+    <select id="lang"><option value="pt-BR">Português (Brasil)</option><option value="en">English</option><option value="es-419">Español (Latinoamérica)</option></select>
     <h3>Como usar</h3>
     <p class="note">Clique e arraste na tela como num celular. Toque no rosto = reação + controles (Pomodoro, Menu, Jogos) que somem sozinhos; dois toques = troca expressão; <b>acariciar</b> (arrastar devagar) = carinho; segurar 2 s = amor. Deslize para cima = menu, para baixo = ajustes rápidos, para os lados = relógio e "Hoje". Nos apps, deslize para a direita para voltar. Segurar 8 s = configuração.</p>
     <h3>Áudio do simulador</h3>

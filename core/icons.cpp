@@ -57,6 +57,29 @@ void drawIcon(Canvas& c, Icon id, float x, float y, float s, Color col, int a) {
       c.fillCircle(X(17), Y(10), 1.8f * u, 0x000000, a);
       c.fillCircle(X(14.5f), Y(16.5f), 2.6f * u, 0x000000, a);
       break;
+    case Icon::Medal: {
+      Pt l[4] = {{X(6), Y(1.5f)}, {X(11), Y(1.5f)}, {X(13.5f), Y(10)}, {X(9), Y(11)}};
+      Pt r[4] = {{X(13), Y(1.5f)}, {X(18), Y(1.5f)}, {X(15), Y(11)}, {X(10.5f), Y(10)}};
+      c.fillPolygon(l, 4, 0xFF5E57, a);
+      c.fillPolygon(r, 4, 0x4C8DFF, a);
+      c.fillCircle(x, Y(15.5f), 7.2f * u, 0xFFD54A, a);
+      c.ring(x, Y(15.5f), 5.6f * u, 1.1f * u, 0xC9971A, a);
+      c.star(x, Y(15.5f), 3.8f * u, 1.7f * u, 0xFFF4C2, a);
+      break;
+    }
+    case Icon::Download:
+      L(12, 3, 12, 15, t);
+      L(7, 10.5f, 12, 15.5f, t); L(17, 10.5f, 12, 15.5f, t);
+      L(4, 20.5f, 20, 20.5f, t);
+      break;
+    case Icon::Globe:
+      c.ring(x, y, 9.5f * u, t, col, a);
+      c.fillEllipse(x, y, 4.2f * u, 9.5f * u, col, a / 4);
+      c.line(X(12), Y(2.5f), X(12), Y(21.5f), t * 0.8f, col, a);
+      L(3, 12, 21, 12, t * 0.8f);
+      c.arc(x, y, 4.6f * u, t * 0.8f, -1.6f, 3.2f, col, a);
+      c.arc(x, y, 4.6f * u, t * 0.8f, kPi - 1.6f, 3.2f, col, a);
+      break;
     case Icon::Games:
       c.fillRoundRect(X(2), Y(7), 20 * u, 11 * u, 5.5f * u, col, a);
       c.fillRect((int)X(6.2f), (int)Y(10.2f), (int)(1.6f * u + 1), (int)(5 * u), 0x000000, a);

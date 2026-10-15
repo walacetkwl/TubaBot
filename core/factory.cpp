@@ -1,4 +1,5 @@
 #include "factory.h"
+#include "i18n.h"
 
 namespace tb {
 
@@ -92,6 +93,8 @@ bool parseFactory(const char* text, size_t len, FactoryConfig& out, const char**
     else if (tbStreq(k, "mostrar_bateria")) { if (!parseBool(v, f.showBattery)) w = "mostrar_bateria inválido"; }
     else if (tbStreq(k, "formato_24h")) { if (!parseBool(v, f.clock24h)) w = "formato_24h inválido"; }
     else if (tbStreq(k, "fuso")) { int t = tzIndexFromIana(v); if (t >= 0) f.tzIndex = (uint8_t)t; else w = "fuso desconhecido"; }
+    else if (tbStreq(k, "idioma")) { Lang l = langFromKey(v); if (l != Lang::Count) f.language = (uint8_t)l; else w = "idioma inválido"; }
+    else if (tbStreq(k, "telemetria")) { if (!parseBool(v, f.telemetry)) w = "telemetria inválida"; }
     else if (tbStreq(k, "serie")) {
       if (utf8Valid(v, tbStrlen(v))) tbStrlcpy(f.serial, v, sizeof f.serial); else w = "serie inválida";
     }
@@ -121,6 +124,8 @@ size_t formatFactory(const FactoryConfig& f, char* out, size_t cap) {
   s.put("mostrar_bateria=").num(f.showBattery).put('\n');
   s.put("formato_24h=").num(f.clock24h).put('\n');
   s.put("fuso=").put(TZ_TABLE[f.tzIndex < TZ_COUNT ? f.tzIndex : 0].iana).put('\n');
+  s.put("idioma=").put(langKey((Lang)(f.language < 3 ? f.language : 0))).put('\n');
+  s.put("telemetria=").num(f.telemetry ? 1 : 0).put('\n');
   if (f.serial[0]) s.put("serie=").put(f.serial).put('\n');
   if (s.overflow) return 0;
   uint32_t c = crc32((const uint8_t*)out, s.len);
@@ -139,6 +144,8 @@ void applyFactoryDefaults(const FactoryConfig& f, Settings& s) {
   s.showBattery = f.model == Model::Pro ? f.showBattery : 0;
   s.clock24h = f.clock24h;
   s.tzIndex = f.tzIndex;
+  s.language = f.language < 3 ? f.language : 0;
+  s.noTelemetry = f.telemetry ? 0 : 1;
 }
 
 }  // namespace tb

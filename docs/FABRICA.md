@@ -14,18 +14,28 @@ personalidade=tranquilo    tranquilo | brincalhao
 mostrar_hora=0             0 | 1  (idem mostrar_clima, mostrar_bateria — esta só vale no Pro)
 formato_24h=1
 fuso=America/Sao_Paulo
-serie=TB-2026-000123       opcional, até 23 caracteres
-crc=E7293584               CRC-32 (zlib) de tudo antes desta linha
+idioma=pt-BR               pt-BR | en | es-419 (idioma inicial; o usuário troca em Sistema → Idioma)
+telemetria=1               0 | 1  (estatísticas anônimas para o painel; o usuário pode desligar)
+serie=TB3-PVM-2610-00042   opcional, até 23 caracteres (--serie auto gera e registra)
+crc=…                      CRC-32 (zlib) de tudo antes desta linha
 ```
 
-Chaves desconhecidas são ignoradas, então perfis futuros podem acrescentar padrões sem quebrar unidades antigas.
+Chaves desconhecidas são ignoradas, então perfis futuros podem acrescentar padrões sem quebrar unidades antigas. Perfis da v3.0 (sem `idioma`/`telemetria`) continuam válidos: português e telemetria ligada.
+
+### Número de série e registro
+
+Para unidades de venda use `--serie auto`: a ferramenta gera a próxima série (`TB3-<P|L><cor>-<AAMM>-<NNNNN>`) e acrescenta a unidade em `firmware/fabrica/registro.csv` (série, modelo, cor, idioma, data). Esse registro alimenta o futuro painel ("não ativados" = registrados que nunca deram sinal). Veja `docs/futuras-atualizacoes.html`.
+
+```bash
+python3 tools/fabrica.py --modelo pro --cor azul --idioma es-419 --serie auto --gravar --porta /dev/cu.usbmodem1101
+```
 
 ## Onde o perfil fica e o que o apaga
 
 | Ação | Firmware | Preferências do usuário | Perfil de fábrica |
 |---|---|---|---|
 | Atualizar pelo portal (OTA) | troca | mantém | **mantém** |
-| Regravar `tubabot-v3.0.0-completo.bin` em 0x0 | troca | mantém* | **mantém** (fica depois do fim da imagem) |
+| Regravar `tubabot-v3.1.0-completo.bin` em 0x0 | troca | mantém* | **mantém** (fica depois do fim da imagem) |
 | "Restaurar padrão de fábrica" (Sistema ou portal) | — | apaga (volta ao primeiro uso com os padrões da unidade) | **mantém** |
 | "Erase flash" (apagar a flash inteira) | apaga | apaga | **apaga** — grave o perfil de novo |
 
@@ -57,7 +67,7 @@ Em <https://espressif.github.io/esptool-js/> (Chrome/Edge): **Connect**, depois 
 
 | Endereço | Arquivo |
 |---|---|
-| `0x0` | `firmware/dist/tubabot-v3.0.0-completo.bin` |
+| `0x0` | `firmware/dist/tubabot-v3.1.0-completo.bin` |
 | `0xFEF000` | `firmware/fabrica/fabrica-pro-vermelho.bin` (o perfil da unidade) |
 
 **Program**. Pronto: a unidade liga já vermelha, Pro, tema escuro.

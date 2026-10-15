@@ -49,6 +49,11 @@ static const PatternDef DEFS[(int)Pattern::Count] = {
   {"charge", Sound::Charge, V_SHORT, 1},
   {"lowbattery", Sound::LowBattery, V_DOUBLE, 1},
   {"breath", Sound::Breath, nullptr, 0},
+  {"legend", Sound::Legend, V_UNLOCK, 1},
+  {"nom", Sound::Nom, V_SHORT, 1},
+  {"slurp", Sound::Slurp, V_SHORT, 1},
+  {"sip", Sound::Sip, V_SHORT, 1},
+  {"hum", Sound::Hum, V_SHORT, 1},
 };
 
 const char* patternName(Pattern p) { return DEFS[(int)p < (int)Pattern::Count ? (int)p : 0].name; }

@@ -1,4 +1,5 @@
 #include "gfx.h"
+#include "i18n.h"
 
 namespace tb {
 
@@ -283,6 +284,7 @@ void Canvas::glyph(const Font& f, const Glyph& g, int gx, int gy, Color c, int a
 
 int Canvas::textWidth(const char* s, const Font& f) {
   if (!s) return 0;
+  s = tr(s);   // todo texto desenhado passa pela tradução (pt-BR é o texto-fonte)
   const char* end = s + tbStrlen(s);
   int w = 0;
   while (s < end) {
@@ -296,6 +298,7 @@ int Canvas::textWidth(const char* s, const Font& f) {
 
 int Canvas::text(float x, float y, const char* s, const Font& f, Color c, int a, Align al) {
   if (!s || !*s) return 0;
+  s = tr(s);
   int w = textWidth(s, f);
   a = a * galpha_ / 255;
   int pen = iround(x + ox_);

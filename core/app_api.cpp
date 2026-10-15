@@ -56,6 +56,8 @@ void App::writePrefs(JsonOut& j) {
   j.kint("volume", set_.volume);
   j.kstr("eyeColor", EXPR_COLORS[set_.eyeColor].key);
   j.kstr("theme", set_.theme ? "claro" : "escuro");
+  j.kstr("language", langKey((Lang)set_.language));
+  j.kbool("telemetry", !set_.noTelemetry);
   j.kbool("showClock", set_.showClock); j.kbool("showWeather", set_.showWeather);
   if (caps_.battery) j.kbool("showBattery", set_.showBattery);
   j.kbool("eyeGlow", set_.eyeGlow);
@@ -80,6 +82,7 @@ void App::writeProgress(JsonOut& j) {
   j.kint("timingBestPct100", P.timingBestPct100).kint("timingBestErrMs", P.timingBestErrMs).kint("timingBestTargetCs", P.timingBestTargetCs);
   j.kint("gamesPlayed", P.gamesPlayed).kint("mood", P.mood).kint("bond", P.bond);
   j.kint("diveBest", P.diveBest).kint("danceSeconds", P.danceSeconds).kint("breathSessions", P.breathSessions).kint("shakes", P.shakes).kint("boops", P.boops);
+  j.kint("legendMask", P.legendMask);
   j.kbool("testProfile", testMode_);
   j.endObj();
 }
@@ -191,6 +194,13 @@ int App::applyPrefsJson(const JsonVal& v, JsonOut& err, int& errCount, ms_t now,
     char k[12] = {0}; x.asString(k, sizeof k);
     if (tbStreq(k, "escuro")) s.theme = 0; else if (tbStreq(k, "claro")) s.theme = 1; else fail("theme", "use escuro ou claro");
   }
+  x = v.get("language");
+  if (x.ok()) {
+    char k[16] = {0}; Lang l = x.asString(k, sizeof k) ? langFromKey(k) : Lang::Count;
+    if (l == Lang::Count) fail("language", "use pt-BR, en ou es-419"); else s.language = (uint8_t)l;
+  }
+  x = v.get("telemetry");
+  if (x.ok()) { bool b; if (!x.asBool(b)) fail("telemetry", "use verdadeiro/falso"); else s.noTelemetry = b ? 0 : 1; }
   getBool(v, "showClock", s.showClock); getBool(v, "showWeather", s.showWeather);
   if (caps_.battery) getBool(v, "showBattery", s.showBattery);
   getBool(v, "eyeGlow", s.eyeGlow);
@@ -309,6 +319,15 @@ int App::apiStatus(JsonOut& j, ms_t now) {
   int mins = 0, na = nextAlarmIndex(now, &mins);
   j.beginObj("nextAlarm").kint("index", na); if (na >= 0) j.kint("inMinutes", mins); j.endObj();
   j.beginObj("storage").kbool("recovered", recovered_).kint("writes", writes_).endObj();
+  j.kstr("language", langKey((Lang)set_.language));
+  j.beginObj("legend").kint("seen", legendsSeen()).kint("total", SCENE_COUNT).kint("bond", P().bond);
+  if (scene_.active()) j.kstr("playing", sceneInfo(scene_.id()).key); else j.knull("playing");
+  j.kbool("medal", medalVisible(now)).endObj();
+  j.beginObj("update").kstr("installed", TB_VERSION).kstr("pending", set_.updVersion)
+      .kbool("serviceConfigured", plat_.serviceUrl(Service::UpdateManifest)[0] != 0)
+      .kbool("auto", set_.updAuto).kint("dueMin", set_.updDueMin).kint("snoozes", set_.updSnoozes)
+      .kstr("result", updResult_ == 1 ? "up_to_date" : updResult_ == 2 ? "available" : updResult_ < 0 ? "failed" : "never")
+      .kbool("checking", updChecking_).endObj();
   j.beginObj("event").kint("seq", eventSeq_).kstr("last", lastEvent_).endObj();
   return 200;
 }
@@ -370,6 +389,52 @@ int App::apiAction(const JsonVal& v, JsonOut& j, ms_t now, bool devTools) {
   else if (tbStreq(a, "alarm.snooze")) { if (alertN_ && alerts_[0].type == AlertType::Alarm) ackAlert(now, true); }
   else if (tbStreq(a, "weather.refresh")) { weatherTryAt_ = 0; weatherFailed_ = false; }
   else if (tbStreq(a, "reboot")) { flush(now, true); plat_.requestReboot(); }
+  else if (tbStreq(a, "legend.play")) {
+    // repetir uma lendária já descoberta ("mostrar para os amigos"); descobrir só nas ferramentas de desenvolvedor
+    char k[24]; if (!v.get("scene").asString(k, sizeof k)) return -2;
+    SceneId sc = sceneFromKey(k);
+    if (sc == SceneId::Count) return -2;
+    bool discover = false; v.get("discover").asBool(discover);
+    bool seen = (P().legendMask >> (int)sc) & 1u;
+    if (!seen && !(devTools && devBuild_)) return -4;
+    if (discover && devTools && devBuild_) {
+      if (!testMode_) { progTest_ = prog_; testMode_ = true; }  // perfil de teste: não mexe no progresso real
+      progTest_.legendMask &= (uint16_t)~(1u << (int)sc);
+    }
+    playLegend(sc, now, discover && devTools && devBuild_, screen_ == Screen::Legends ? Screen::Legends : Screen::Face);
+  }
+  else if (tbStreq(a, "legend.open")) { transDir_ = 0; gotoScreen(Screen::Legends, now); }
+  else if (tbStreq(a, "clock.open")) goHome(now, Screen::Clock);
+  else if (tbStreq(a, "intro.replay")) { bootAt_ = now; transDir_ = 0; gotoScreen(Screen::Intro, now); }
+  else if (tbStreq(a, "update.check")) checkUpdatesNow(now);
+  else if (tbStreq(a, "update.schedule")) {
+    char k[12] = {0}; v.get("when").asString(k, sizeof k);
+    if (!set_.updVersion[0]) return -2;
+    int c = tbStreq(k, "now") ? 0 : tbStreq(k, "hour") ? 1 : tbStreq(k, "night") ? 2 : -1;
+    if (c < 0) return -2;
+    if (screen_ != Screen::UpdateOffer) returnScreen_ = screen_;
+    scheduleUpdate(c, now);
+  }
+  else if (devTools && devBuild_ && tbStreq(a, "dev.updateInstalled")) {
+    // simulador: "instalou" a versão pendente (o núcleo do simulador continua com a versão atual)
+    set_.updVersion[0] = 0; set_.updDueMin = 0; set_.updSnoozes = 0; set_.updAuto = 0; updDueMs_ = 0; updResult_ = 1;
+    markSettings(now);
+  }
+  else if (devTools && devBuild_ && tbStreq(a, "dev.bond")) {
+    int64_t b = 0; if (!v.get("bond").asInt(b) || b < 0 || b > 1000) return -2;
+    if (!testMode_) { progTest_ = prog_; testMode_ = true; }
+    progTest_.bond = (uint16_t)b;
+  }
+  else if (devTools && devBuild_ && tbStreq(a, "dev.legendNow")) {
+    // força a avaliação natural agora (como se fosse um "dia lendário"): respeita afinidade e horário
+    if (!testMode_) { progTest_ = prog_; testMode_ = true; }
+    progTest_.legendDay = 0;
+    legendRollDay_ = localDay(now); legendToday_ = true; legendAtMin_ = 0;
+    lastInteraction_ = now - 60000; nextLegendCheck_ = 0;
+    if (screen_ != Screen::Face) gotoScreen(Screen::Face, now), lastInteraction_ = now - 60000;
+    maybeLegend(now);
+    j.kstr("scene", scene_.active() ? sceneInfo(scene_.id()).key : "");
+  }
   else if (devTools && devBuild_ && tbStreq(a, "dev.unlockAll")) {
     // desbloqueio de TESTE: perfil separado, nunca gravado
     if (!testMode_) { progTest_ = prog_; testMode_ = true; }
@@ -448,6 +513,26 @@ int App::api(const char* method, const char* path, const char* body, size_t body
       j.kint("current", tbMin(cur, goal)).kint("goal", goal).endObj();
     }
     j.endArr().endObj();
+    return 200;
+  }
+  if (tbStreq(path, "/api/legends") && isGet) {
+    const Progress& Pr = P();
+    JsonOut j(out); j.beginObj().kbool("ok", true).kint("seen", legendsSeen()).kint("total", SCENE_COUNT).beginArr("items");
+    for (int i = 0; i < SCENE_COUNT; i++) {
+      bool seen = (Pr.legendMask >> i) & 1u;
+      j.beginObj().kbool("seen", seen);
+      if (seen || ctx.devTools) j.kstr("key", sceneInfo((SceneId)i).key).kstr("name", tr(sceneInfo((SceneId)i).name)).kstr("hint", tr(sceneInfo((SceneId)i).hint));
+      j.endObj();   // secretas: nem o nome aparece (a não ser nas ferramentas de desenvolvedor)
+    }
+    j.endArr().endObj();
+    return 200;
+  }
+  if (tbStreq(path, "/api/telemetry") && isGet) {
+    // prévia local exata do que seria enviado ao painel da TubaLabs (transparência)
+    JsonOut j(out); j.beginObj().kbool("ok", true).kbool("enabled", !set_.noTelemetry)
+        .kbool("serviceConfigured", plat_.serviceUrl(Service::Telemetry)[0] != 0).beginObj("payload");
+    writeTelemetry(j, now);
+    j.endObj().endObj();
     return 200;
   }
   if (tbStreq(path, "/api/ota") && isGet) {

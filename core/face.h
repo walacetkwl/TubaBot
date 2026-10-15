@@ -75,7 +75,9 @@ class FaceRenderer {
   Expr expression() const { return target_; }
   Expr shown() const { return microActive_ ? micro_ : target_; }
   void update(ms_t now, Rng& rng, const PersonalityTuning& t, uint8_t animLevel);
-  void draw(Canvas& c, ms_t now, const FaceStyle& st);
+  void draw(Canvas& c, ms_t now, const FaceStyle& st) { drawAt(c, now, st, (float)SCR_CX, layoutCy_, layoutS_); }
+  // Mesmo rosto vivo (piscar, olhar, transições) em outra posição/escala (ex.: relógio "Tuba").
+  void drawAt(Canvas& c, ms_t now, const FaceStyle& st, float cx, float cy, float s, uint16_t extrasMask = 0xFFFF);
   void setPetting(bool on) { petting_ = on; }
   // Olhar dirigido (dedo, inclinação): −1000..1000 nos dois eixos.
   void setLookTarget(bool active, int nx, int ny) { lookExt_ = active; extX_ = nx; extY_ = ny; }

@@ -35,6 +35,12 @@ screens: $(BUILD)/screens
 	@rm -rf $(BUILD)/telas && mkdir -p $(BUILD)/telas
 	./$(BUILD)/screens $(BUILD)/telas
 	python3 tools/gallery.py $(BUILD)/telas docs/telas.png
+## Textos sem tradução (percorre as telas em inglês e espanhol)
+i18n-audit: $(BUILD)/screens
+	@rm -rf $(BUILD)/telas-en $(BUILD)/telas-es && mkdir -p $(BUILD)/telas-en $(BUILD)/telas-es
+	TB_LANG=en TB_TR_AUDIT=1 ./$(BUILD)/screens $(BUILD)/telas-en | tail -40
+	TB_LANG=es TB_TR_AUDIT=1 ./$(BUILD)/screens $(BUILD)/telas-es | tail -3
+
 $(BUILD)/screens: tools/screens.cpp $(CORE) core/*.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -O2 tools/screens.cpp $(CORE) -o $@

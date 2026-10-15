@@ -17,7 +17,8 @@ OUT = os.path.join(ROOT, "core", "font_data.cpp")
 
 ASCII = "".join(chr(c) for c in range(32, 127))
 PTBR = "áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇºª°·•…–—“”‘’×÷±"
-FULL = ASCII + PTBR
+ES = "ñÑ¿¡"   # espanhol (América Latina)
+FULL = ASCII + PTBR + ES
 DIGITS = "0123456789:.,%-+ ºhmsAPM°/"
 CLOCK = "0123456789: "
 

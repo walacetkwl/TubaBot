@@ -58,6 +58,7 @@
     let t = `modelo=${f.modelo}\ncor=${f.cor}\n`;
     if (f.expressao) t += `expressao=${f.expressao}\n`;
     t += `tema=${f.tema}\n`;
+    if (f.idioma) t += `idioma=${f.idioma}\n`;
     if (f.serie) t += `serie=${f.serie}\n`;
     const len = writeStr(X.sim_inbuf(), X.sim_inbuf_size(), t);
     const n = X.sim_factory_compose(len);
@@ -73,7 +74,7 @@
   function showFactory() {
     const t = ls.get(FAB_KEY), f = parseFab(t);
     $("#fText").textContent = t || "(sem perfil gravado — a unidade se comporta como Lite genérico)";
-    if (t) { $("#fModel").value = f.modelo; $("#fBody").value = f.cor; $("#fTheme").value = f.tema; $("#fExpr").value = f.expressao === f.cor ? "" : f.expressao; $("#fSerial").value = f.serie || ""; }
+    if (t) { $("#fModel").value = f.modelo; $("#fBody").value = f.cor; $("#fTheme").value = f.tema; $("#fLang").value = f.idioma || "pt-BR"; $("#fExpr").value = f.expressao === f.cor ? "" : f.expressao; $("#fSerial").value = f.serie || ""; }
     const body = t ? f.cor : "grafite";
     document.documentElement.style.setProperty("--body", BODY_RGB[body] || BODY_RGB.grafite);
     $("#badge").textContent = t ? `TubaBot ${f.modelo === "pro" ? "Pro" : "Lite"}` : "sem perfil";
@@ -216,13 +217,39 @@
     });
   }
 
+  // ── servidor da TubaLabs simulado: manifesto, download e telemetria ──
+  let published = false, otaPm = -1, lastTel = null;
+  const SHA = "5f".repeat(32);
+  function onlineTick(now) {
+    const pu = X.sim_update_want(now);
+    if (pu) {
+      const body = published ? { version: "3.2.0", url: "sim://tubalabs/tubabot-3.2.0-app-ota.bin", sha256: SHA, size: 1560000,
+        notes: { "pt-BR": "Novas reações e melhorias", en: "New reactions and improvements", "es-419": "Nuevas reacciones y mejoras" } } : { version: "3.1.0" };
+      const len = writeStr(X.sim_inbuf(), X.sim_inbuf_size(), JSON.stringify(body));
+      X.sim_update_result(len, 200, now);
+      log(`atualização: manifesto consultado (${published ? "3.2.0 disponível" : "em dia"})`);
+    }
+    if (otaPm < 0 && X.sim_update_install(now)) { otaPm = 0; log("atualização: baixando (simulado) e conferindo SHA-256"); }
+    if (otaPm >= 0) {
+      otaPm += 12; X.sim_ota_progress(Math.min(1000, otaPm));
+      if (otaPm >= 1000) {
+        otaPm = -1; published = false;
+        myApi("POST", "/api/action", { action: "dev.updateInstalled" }, true);
+        log("— atualização instalada (simulada); reiniciando —"); init(true);
+      }
+    }
+    const pt = X.sim_telemetry_want(now);
+    if (pt) { lastTel = cstr(pt); X.sim_telemetry_result(200, now); log("telemetria enviada ao painel (simulado)"); }
+  }
+
   // ── laço ──
-  let lastSound = 0, lastWeather = 0, lastS = false;
+  let lastSound = 0, lastWeather = 0, lastS = false, lastOnline = 0;
   function loop() {
     const now = vtNow();
     if (stuck) X.sim_touch(1, lastX, lastY, now);
     if (now - lastSound >= 40 && caps & 8) { lastSound = now; soundTick(now); }
     if (now - lastWeather >= 2000) { lastWeather = now; weatherTick(now); }
+    if (now - lastOnline >= 100) { lastOnline = now; onlineTick(now); }
     if (X.sim_tick(now)) { draw(); X.sim_presented(vtNow()); }
     const s = !!X.sim_sound_active(now);
     if (s !== lastS) { $("#ledS").classList.toggle("on", s); lastS = s; }
@@ -252,7 +279,7 @@
     caps = ($("#cSpk").checked ? 1 : 0) | ($("#cMic").checked ? 8 : 0) | 16;
     ls.set("tubabot.v3.caps", String(caps)); log("— hardware alterado; reiniciando —"); init(false);
   };
-  const fabFields = () => ({ modelo: $("#fModel").value, cor: $("#fBody").value, expressao: $("#fExpr").value, tema: $("#fTheme").value, serie: $("#fSerial").value.trim() });
+  const fabFields = () => ({ modelo: $("#fModel").value, cor: $("#fBody").value, expressao: $("#fExpr").value, tema: $("#fTheme").value, idioma: $("#fLang").value, serie: $("#fSerial").value.trim() });
   const wipeUser = () => { for (let k = 1; k <= 3; k++) ls.del(key(k)); };
   $("#fWrite").onclick = () => { const t = composeFactory(fabFields()); if (!t) return; X.sim_flush(vtNow()); ls.set(FAB_KEY, t); wipeUser(); log("— perfil de fábrica gravado; unidade nova —"); init(false); };
   $("#fKeep").onclick = () => { const t = composeFactory(fabFields()); if (!t) return; X.sim_flush(vtNow()); ls.set(FAB_KEY, t); log("— perfil de fábrica gravado (dados mantidos) —"); init(false); };
@@ -273,6 +300,39 @@
   $("#burst").onclick = () => { for (let i = 0; i < 3; i++) myApi("POST", "/api/action", { action: "timer.start", slot: i, seconds: 5 }); log("3 timers de 5 s iniciados"); };
   $("#devUnlock").onclick = () => { const r = myApi("POST", "/api/action", { action: "dev.unlockAll" }, true); log(r.status === 200 ? "perfil de TESTE: expressões desbloqueadas (não gravado)" : "falha: " + r.body.error); };
   $("#devTestOff").onclick = () => { myApi("POST", "/api/action", { action: "dev.testProfileOff" }, true); log("perfil de teste desligado"); };
+
+  // ── reações lendárias ──
+  const SCENES = [["relogio", "Olhar o relógio"], ["joinha", "Joinha"], ["peixe", "Peixinho passando"], ["peixe_come", "Pegou o peixe!"],
+    ["cafe", "Cafezinho"], ["meditacao", "Meditação"], ["escada", "Escada rolante"], ["ouvidos", "Que barulho!"], ["bocejo", "Bocejo"]];
+  $("#legBtns").innerHTML = SCENES.map(([k, n]) => `<div style="margin:4px 0"><b style="display:inline-block;width:150px">${n}</b>` +
+    `<button class="btn" data-play="${k}">Ver</button><button class="btn" data-disc="${k}">Descobrir (1ª vez + medalha)</button></div>`).join("");
+  const playLegend = (k, disc) => { audioInit(); const r = myApi("POST", "/api/action", { action: "legend.play", scene: k, discover: disc }, true); log(r.status === 200 ? `lendária: ${k}${disc ? " (descoberta)" : ""}` : "falha: " + r.body.error); };
+  $$("[data-play]").forEach(b => b.onclick = () => playLegend(b.dataset.play, false));
+  $$("[data-disc]").forEach(b => b.onclick = () => playLegend(b.dataset.disc, true));
+  $("#bond").oninput = e => $("#bondv").textContent = e.target.value;
+  $("#bondSet").onclick = () => { myApi("POST", "/api/action", { action: "dev.bond", bond: Number($("#bond").value) }, true); log("afinidade de TESTE: " + $("#bond").value); };
+  $("#legNow").onclick = () => { const r = myApi("POST", "/api/action", { action: "dev.legendNow" }, true); log(r.body.scene ? "dia lendário: " + r.body.scene : "dia lendário: nenhuma elegível agora (afinidade/horário)"); };
+  $("#introAgain").onclick = () => myApi("POST", "/api/action", { action: "intro.replay" });
+  const setClock = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); myApi("POST", "/api/time", { epoch: Math.floor(d.getTime() / 1000) }); log(`hora ajustada para ${h}:${String(m).padStart(2, "0")} (horário do computador)`); };
+  $("#night").onclick = () => { setClock(20, 30); log("o Tuba sorteia a hora de dormir entre 20:00 e 22:30; perto dela fica cansado e depois sonolento (troca a cada ~1 min)"); };
+  $("#morning").onclick = () => setClock(8, 0);
+  $("#tubaClock").onclick = () => { myApi("POST", "/api/prefs", { watchFace: 2 }); myApi("POST", "/api/action", { action: "clock.open" }); };
+  $("#openLegends").onclick = () => myApi("POST", "/api/action", { action: "legend.open" });
+  // ── idioma ──
+  $("#lang").onchange = e => { const r = myApi("POST", "/api/prefs", { language: e.target.value }); log(r.status === 200 ? "idioma: " + e.target.value : "falha: " + r.body.error); };
+  // ── atualização / telemetria ──
+  $("#homeWifi").onclick = () => { const r = myApi("POST", "/api/wifi", { ssid: "CasaSimulada", pass: "" }); log(r.status === 200 ? "Wi-Fi de casa conectado (simulado)" : "falha: " + r.body.error); };
+  $("#publish").onclick = () => { published = true; log("servidor: v3.2.0 publicada — os TubaBots conectados recebem o aviso na próxima consulta"); myApi("POST", "/api/action", { action: "update.check" }); };
+  $("#unpublish").onclick = () => { published = false; log("servidor: publicação retirada"); };
+  $("#checkNow").onclick = () => myApi("POST", "/api/action", { action: "update.check" });
+  setInterval(() => {
+    const st = myApi("GET", "/api/status").body, w = myApi("GET", "/api/wifi").body;
+    $("#wifiState").textContent = w.state === "connected" ? "Wi-Fi de casa: conectado" : "Wi-Fi de casa: " + (w.configured ? w.state : "não configurado");
+    $("#updState").textContent = JSON.stringify(st.update, null, 1) + (published ? "\nservidor: 3.2.0 publicada" : "\nservidor: 3.1.0 (atual)");
+    const tl = myApi("GET", "/api/telemetry").body;
+    $("#telState").textContent = JSON.stringify(tl.payload, null, 1) + (lastTel ? "\n\núltimo envio: ok" : "");
+    if ($("#lang").value !== (myApi("GET", "/api/prefs").body.prefs || {}).language) $("#lang").value = (myApi("GET", "/api/prefs").body.prefs || {}).language || "pt-BR";
+  }, 1500);
 
   // teste automatizado (e2e) acessa o núcleo por aqui
   window.TB = { X, api: myApi, vtNow, init, cstr, composeFactory, FAB_KEY, ls };

@@ -113,6 +113,29 @@ ok(pr2.eyeColor === 'rosa' && pr2.theme === 'claro' && pr2.showClock === true, '
 await fr.locator('button[data-tabbtn="Foco e tempo"]').click();
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${out}/06_foco.png` });
+// v3.1: reações lendárias, idioma e aviso de atualização pela aba do simulador
+await page.locator('button[data-p="leg"]').click();
+await page.locator('[data-disc="escada"]').click();
+await page.waitForTimeout(300);
+let st3 = await page.evaluate(() => window.TB.api('GET', '/api/status').body);
+ok(st3.legend && st3.legend.playing === 'escada', 'aba Reações toca a escada rolante');
+await page.waitForTimeout(3500);
+await page.screenshot({ path: `${out}/08_lendaria.png` });
+await page.locator('button[data-p="ctl"]').click();
+await page.locator('#lang').selectOption('en');
+await page.waitForTimeout(400);
+ok((await page.evaluate(() => window.TB.api('GET', '/api/prefs').body.prefs.language)) === 'en', 'idioma do aparelho muda para inglês');
+await page.locator('#lang').selectOption('pt-BR');
+await page.locator('button[data-p="upd"]').click();
+await page.locator('#homeWifi').click();
+await page.locator('#publish').click();
+let offered = false;
+for (let i = 0; i < 40 && !offered; i++) { await page.waitForTimeout(250); offered = (await page.evaluate(() => window.TB.api('GET', '/api/status').body.screen)) === 'update_offer'; }
+ok(offered, 'atualização publicada: o Tuba avisa na tela');
+await page.screenshot({ path: `${out}/09_atualizacao.png` });
+await page.evaluate(() => window.TB.api('POST', '/api/action', { action: 'update.schedule', when: 'hour' }));
+const up = await page.evaluate(() => window.TB.api('GET', '/api/status').body.update);
+ok(up.pending === '3.2.0' && up.snoozes === 1, 'adiar 1 hora mantém a atualização pendente');
 // Nenhum recurso externo carregado
 const ext = await page.evaluate(() => performance.getEntriesByType('resource').map(r => r.name).filter(n => /^https?:/.test(n)));
 const extPortal = await frame.evaluate(() => performance.getEntriesByType('resource').map(r => r.name).filter(n => /^https?:/.test(n)));

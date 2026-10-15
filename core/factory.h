@@ -19,6 +19,8 @@
 //   mostrar_hora=0             0 | 1   (idem mostrar_clima, mostrar_bateria)
 //   formato_24h=1              0 | 1
 //   fuso=America/Sao_Paulo     fuso IANA da tabela
+//   idioma=pt-BR               pt-BR | en | es-419 (idioma inicial da interface)
+//   telemetria=1               0 | 1   (estatísticas anônimas p/ o painel TubaLabs; o usuário pode desligar)
 //   serie=TB-2026-000123       identificação livre (até 23 caracteres)
 //   crc=1A2B3C4D               CRC-32 (zlib) de todos os bytes antes desta linha
 //
@@ -43,6 +45,8 @@ struct FactoryConfig {
   uint8_t showClock = 0, showWeather = 0, showBattery = 0;
   uint8_t clock24h = 1;
   uint8_t tzIndex = 0;
+  uint8_t language = 0;   // Lang (i18n.h)
+  uint8_t telemetry = 1;
   char serial[24] = {0};
 };
 

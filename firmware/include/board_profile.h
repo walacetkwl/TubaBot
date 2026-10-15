@@ -72,3 +72,16 @@
 #define TB_AP_IP_OCTETS 192, 168, 4, 1
 #define TB_HTTP_MAX_BODY 4096
 #define TB_STA_CONNECT_TIMEOUT_MS 20000
+
+// ── Serviços da TubaLabs na internet (vazios = desligados até o servidor existir) ──
+// Manifesto de atualização (JSON, ver docs/futuras-atualizacoes.html) e coleta de telemetria.
+// Defina no platformio.ini (build_flags) ao publicar, ex.:
+//   -DTB_UPDATE_URL=\"https://atualiza.tubalabs.com.br/tubabot/es3c28p/estavel.json\"
+// Opcional: -DTB_SERVICE_CA=... (certificado raiz para fixar o TLS dos serviços).
+#ifndef TB_UPDATE_URL
+#define TB_UPDATE_URL ""
+#endif
+#ifndef TB_TELEMETRY_URL
+#define TB_TELEMETRY_URL ""
+#endif
+

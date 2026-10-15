@@ -59,3 +59,13 @@ Decisões da v3:
 5. **Tema claro** sem halo nos olhos e com brilhos em tom da cor (o halo em fundo branco vira mancha); mistura de cores com arredondamento ao mais próximo para não gerar tons esverdeados em RGB565.
 6. **Sem IMU e sem RTC na placa:** a lógica de movimento continua no núcleo (testada, oculta por `caps.imu`); NTP passa a vir ligado por padrão.
 7. Dados de pinos divergentes (habilitação do amplificador: LCDWIKI "baixo liga" × BSP "alto liga") ficam como opção `TB_PA_ACTIVE_LOW` para a bancada.
+
+## v3.1 — personalidade, lendárias, idiomas e preparação online (out/2026)
+
+1. **Tela nunca apaga por padrão** (pedido); sono diário sorteado 20:00–22:30 e despertar 6:00–7:00, por dia (determinístico dentro do dia).
+2. **Lendárias como funções puras do tempo** (`core/scenes.cpp`): mesmo quadro no firmware, simulador e testes (crosscheck inclui cenas). Mãos são "luvinhas" na cor das expressões, para combinar com o rosto em qualquer tema.
+3. **Raridade:** sorteio diário (18%→55% com a afinidade), máximo 1/dia, só com plateia (interação nos últimos 30 min, nunca nos 30 s após um toque); "Que barulho!" só por som alto; café só de manhã; bocejo só à noite. Medalha e descoberta valem mesmo se a cena for interrompida.
+4. **Tradução na camada de desenho:** `Canvas::text` traduz pelo conteúdo (hash), o que cobre rótulos copiados para buffers; pedaços de textos compostos usam `tr()`. Alternativa descartada: IDs de string em todo o código (refatoração enorme e propensa a erro).
+5. **Atualização e telemetria decididas no núcleo** (testáveis), firmware só transporta. URLs vazias por padrão: nada é enviado até existir servidor. Telemetria sem dados pessoais (LGPD: minimização).
+6. **Proteção:** licença proprietária + Secure Boot v2/Flash Encryption documentados (não ativados no build de desenvolvimento porque os eFuses são irreversíveis). Ofuscação descartada.
+7. Placa comprada: anúncio do AliExpress (captura enviada pela dona do projeto) confere com a ES3C28P — N16R8, ILI9341V, D-FT6336G, alto-falante 1,5 W/8 Ω, LiPo 3,7 V; tabela em `HARDWARE.md`.

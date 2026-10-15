@@ -19,15 +19,20 @@ Exemplos:
   # a partir de um arquivo de texto (chave=valor), ex.: firmware/fabrica/exemplo.txt
   python3 tools/fabrica.py --arquivo meu_perfil.txt
 
+  # unidade de produção: número de série automático (registrado em firmware/fabrica/registro.csv)
+  python3 tools/fabrica.py --modelo pro --cor azul --idioma es-419 --serie auto
+
   # gravar direto pela USB (precisa do esptool: pip install esptool)
   python3 tools/fabrica.py --modelo pro --cor azul --gravar --porta /dev/cu.usbmodem1101
 
 Saída: firmware/fabrica/fabrica-<modelo>-<cor>.bin (+ .txt legível).
 Gravação pelo navegador (https://espressif.github.io/esptool-js/):
-  0x0       firmware/dist/tubabot-v3.0.0-completo.bin
+  0x0       firmware/dist/tubabot-v3.1.0-completo.bin
   0xFEF000  firmware/fabrica/fabrica-pro-vermelho.bin
 """
 import argparse
+import csv
+import datetime
 import os
 import subprocess
 import sys
@@ -43,11 +48,14 @@ MODELOS = ["lite", "pro"]
 CORES = ["vermelho", "azul", "branco", "grafite"]          # cores físicas (BODIES no núcleo)
 EXPRESSOES = ["vermelho", "azul", "branco", "grafite", "ciano", "verde", "lilas", "rosa", "amarelo", "laranja"]
 TEMAS = ["escuro", "claro"]
+IDIOMAS = ["pt-BR", "en", "es-419"]
 ORDEM = ["modelo", "cor", "expressao", "tema", "volume", "brilho", "personalidade",
-         "mostrar_hora", "mostrar_clima", "mostrar_bateria", "formato_24h", "fuso", "serie"]
+         "mostrar_hora", "mostrar_clima", "mostrar_bateria", "formato_24h", "fuso", "idioma", "telemetria", "serie"]
 PADRAO = {"tema": "escuro", "volume": "60", "brilho": "80", "personalidade": "tranquilo",
           "mostrar_hora": "0", "mostrar_clima": "0", "mostrar_bateria": "0", "formato_24h": "1",
-          "fuso": "America/Sao_Paulo"}
+          "fuso": "America/Sao_Paulo", "idioma": "pt-BR", "telemetria": "1"}
+REGISTRO = os.path.join(OUT_DIR, "registro.csv")
+CAMPOS_REGISTRO = ["serie", "modelo", "cor", "expressao", "tema", "idioma", "gravado_em", "arquivo"]
 
 
 def validar(p):
@@ -68,7 +76,9 @@ def validar(p):
             erros.append(f"{k} deve ser um número de {lo} a {hi}")
     if p.get("personalidade") not in ("tranquilo", "brincalhao"):
         erros.append("personalidade deve ser tranquilo ou brincalhao")
-    for k in ("mostrar_hora", "mostrar_clima", "mostrar_bateria", "formato_24h"):
+    if p.get("idioma") not in IDIOMAS:
+        erros.append("idioma deve ser um de: " + ", ".join(IDIOMAS))
+    for k in ("mostrar_hora", "mostrar_clima", "mostrar_bateria", "formato_24h", "telemetria"):
         if p.get(k) not in ("0", "1"):
             erros.append(f"{k} deve ser 0 ou 1")
     if len(p.get("serie", "").encode()) > 23:
@@ -90,6 +100,33 @@ def montar(p):
     if len(texto) > SIZE:
         raise SystemExit("perfil grande demais")
     return p, texto
+
+
+def proxima_serie(modelo, cor, registro=REGISTRO):
+    """Série única: TB3-<P|L><cor>-<AAMM>-<NNNNN> (sequência global do registro)."""
+    n = 0
+    if os.path.exists(registro):
+        with open(registro, encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                try:
+                    n = max(n, int(row["serie"].rsplit("-", 1)[1]))
+                except (KeyError, ValueError, IndexError):
+                    pass
+    cor_cod = {"vermelho": "VM", "azul": "AZ", "branco": "BR", "grafite": "GF"}[cor]
+    return f"TB3-{'P' if modelo == 'pro' else 'L'}{cor_cod}-{datetime.date.today():%y%m}-{n + 1:05d}"
+
+
+def registrar(p, binp, registro=REGISTRO):
+    """Acrescenta a unidade ao registro (base do painel: 'não ativados' = registrados que nunca deram sinal)."""
+    novo = not os.path.exists(registro)
+    os.makedirs(os.path.dirname(registro), exist_ok=True)
+    with open(registro, "a", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CAMPOS_REGISTRO)
+        if novo:
+            w.writeheader()
+        w.writerow({"serie": p["serie"], "modelo": p["modelo"], "cor": p["cor"], "expressao": p["expressao"],
+                    "tema": p["tema"], "idioma": p["idioma"], "gravado_em": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "arquivo": os.path.relpath(binp, ROOT)})
 
 
 def ler_arquivo(caminho):
@@ -128,7 +165,9 @@ def main():
     ap.add_argument("--volume")
     ap.add_argument("--brilho")
     ap.add_argument("--personalidade", choices=["tranquilo", "brincalhao"])
-    ap.add_argument("--serie")
+    ap.add_argument("--idioma", choices=IDIOMAS, help="idioma inicial da interface")
+    ap.add_argument("--telemetria", choices=["0", "1"], help="estatísticas anônimas (padrão 1; o usuário pode desligar)")
+    ap.add_argument("--serie", help="número de série; 'auto' gera o próximo e registra em firmware/fabrica/registro.csv")
     ap.add_argument("--arquivo", help="perfil em texto chave=valor")
     ap.add_argument("--todos", action="store_true", help="gera os 8 perfis padrão (Lite/Pro × 4 cores)")
     ap.add_argument("--saida", default=OUT_DIR)
@@ -141,7 +180,7 @@ def main():
         perfis = [{"modelo": m, "cor": c} for m in MODELOS for c in CORES]
     else:
         p = ler_arquivo(a.arquivo) if a.arquivo else {}
-        for k in ("modelo", "cor", "expressao", "tema", "volume", "brilho", "personalidade", "serie"):
+        for k in ("modelo", "cor", "expressao", "tema", "volume", "brilho", "personalidade", "idioma", "telemetria", "serie"):
             v = getattr(a, k)
             if v is not None:
                 p[k] = v
@@ -150,8 +189,14 @@ def main():
         perfis = [p]
 
     for p in perfis:
+        auto = p.get("serie") == "auto"
+        if auto:
+            p["serie"] = proxima_serie(p["modelo"], p["cor"])
         full, texto = montar(p)
         binp = salvar(full, texto, a.saida)
+        if auto:
+            registrar(full, binp)
+            print(f"    série {full['serie']} registrada em {os.path.relpath(REGISTRO, ROOT)}")
         print(f"OK  {os.path.relpath(binp, ROOT)}  ({full['modelo']}, {full['cor']}, expressões {full['expressao']}, tema {full['tema']})")
         if a.gravar:
             cmd = [sys.executable, "-m", "esptool", "--chip", "esp32s3"]

@@ -165,6 +165,8 @@ void EspPlatform::sysInfo(SysInfo& s) {
   s.flashSize = ESP.getFlashChipSize(); s.sketchSize = ESP.getSketchSize(); s.sketchFree = ESP.getFreeSketchSpace();
   snprintf(s.chip, sizeof s.chip, "%s rev%d", ESP.getChipModel(), ESP.getChipRevision());
   snprintf(s.build, sizeof s.build, "%s %s", TB_ENV_NAME, __DATE__);
+  uint64_t mac = ESP.getEfuseMac();
+  snprintf(s.deviceId, sizeof s.deviceId, "%012llX", (unsigned long long)(mac & 0xFFFFFFFFFFFFull));
 }
 
 void EspPlatform::applyDisplay(uint8_t b, bool r) { if (screen_) { screen_->setFlipped(r); screen_->setBrightness(b); } rotate_ = r; }
@@ -294,31 +296,45 @@ void EspPlatform::setupServer() {
   });
 }
 
-// ── clima: GET HTTPS numa tarefa própria (o laço da tela nunca espera a rede) ──
+// ── internet: clima, manifesto de atualização e telemetria ─────────────────
+// Um pedido por vez, numa tarefa própria (o laço da tela nunca espera a rede).
+enum NetKind : int { NK_NONE = 0, NK_WEATHER, NK_MANIFEST, NK_TELEMETRY };
 static char wUrl[512];
-static char* wBody = nullptr;
-static volatile int wState = 0;   // 0 livre, 1 pedido, 2 resposta pronta
+static char* wBody = nullptr;        // resposta (8 KB, PSRAM)
+static char* wPost = nullptr;        // corpo do POST de telemetria (2 KB)
+static volatile int wState = 0;      // 0 livre, 1 pedido, 2 resposta pronta
+static volatile int wKind = NK_NONE;
 static volatile int wCode = 0;
 static volatile size_t wLen = 0;
-static void weatherTask(void*) {
+static void netTask(void*) {
   for (;;) {
     if (wState != 1) { vTaskDelay(pdMS_TO_TICKS(200)); continue; }
     NetworkClientSecure cli;
-    // Dados públicos de previsão; a resposta passa pelo validador JSON do núcleo.
-    // (Certificado não fixado: a CA do Open-Meteo pode mudar sem aviso — ver docs/FUNCIONALIDADES.md.)
+    // Clima: dados públicos. Manifesto/telemetria: o binário baixado é conferido por SHA-256
+    // e, em produção, pela assinatura do Secure Boot (docs/PROTECAO.md). Certificado da
+    // TubaLabs pode ser fixado em TB_SERVICE_CA quando o servidor existir.
+#ifdef TB_SERVICE_CA
+    if (wKind != NK_WEATHER) cli.setCACert(TB_SERVICE_CA); else cli.setInsecure();
+#else
     cli.setInsecure();
+#endif
     HTTPClient http;
     http.setTimeout(8000);
     int code = 0; size_t n = 0;
     if (http.begin(cli, wUrl)) {
-      code = http.GET();
-      if (code == 200) {
-        WiFiClient* st = http.getStreamPtr();
-        uint32_t t0 = millis();
-        while ((http.connected() || st->available()) && n < 8191 && millis() - t0 < 8000) {
-          int a = st->available();
-          if (a <= 0) { delay(5); continue; }
-          n += st->readBytes(wBody + n, min((size_t)a, (size_t)8191 - n));
+      if (wKind == NK_TELEMETRY) {
+        http.addHeader("Content-Type", "application/json");
+        code = http.POST((uint8_t*)wPost, strlen(wPost));
+      } else {
+        code = http.GET();
+        if (code == 200) {
+          WiFiClient* st = http.getStreamPtr();
+          uint32_t t0 = millis();
+          while ((http.connected() || st->available()) && n < 8191 && millis() - t0 < 8000) {
+            int a = st->available();
+            if (a <= 0) { delay(5); continue; }
+            n += st->readBytes(wBody + n, min((size_t)a, (size_t)8191 - n));
+          }
         }
       }
       http.end();
@@ -327,10 +343,85 @@ static void weatherTask(void*) {
   }
 }
 
+// ── atualização pela internet: baixa direto para a partição OTA conferindo SHA-256 ──
+#include <mbedtls/sha256.h>
+static char dlUrl[200], dlSha[70];
+static volatile uint32_t dlSize = 0;
+static volatile int dlState = 0;     // 0 parado, 1 baixando, 2 ok (reiniciar), 3 falhou
+static volatile int dlPermille = 0;
+static void downloadTask(void*) {
+  NetworkClientSecure cli;
+#ifdef TB_SERVICE_CA
+  cli.setCACert(TB_SERVICE_CA);
+#else
+  cli.setInsecure();
+#endif
+  HTTPClient http;
+  http.setTimeout(15000);
+  bool ok = false;
+  if (http.begin(cli, dlUrl) && http.GET() == 200) {
+    int total = http.getSize();
+    if (total <= 0 && dlSize) total = (int)dlSize;
+    if (total > 0 && (!dlSize || (uint32_t)total == dlSize) && Update.begin((size_t)total, U_FLASH)) {
+      mbedtls_sha256_context sh; mbedtls_sha256_init(&sh); mbedtls_sha256_starts(&sh, 0);
+      WiFiClient* st = http.getStreamPtr();
+      static uint8_t buf[4096];
+      int got = 0; uint32_t last = millis();
+      while (got < total && millis() - last < 20000) {
+        int a = st->available();
+        if (a <= 0) { delay(5); continue; }
+        int r = st->readBytes(buf, min(a, (int)sizeof buf));
+        if (r <= 0) continue;
+        if (got == 0 && buf[0] != 0xE9) break;                       // não é imagem ESP32
+        mbedtls_sha256_update(&sh, buf, r);
+        if (Update.write(buf, r) != (size_t)r) break;
+        got += r; last = millis();
+        dlPermille = (int)((int64_t)got * 1000 / total);
+      }
+      uint8_t dig[32]; mbedtls_sha256_finish(&sh, dig); mbedtls_sha256_free(&sh);
+      char hex[65]; for (int i = 0; i < 32; i++) sprintf(hex + i * 2, "%02x", dig[i]);
+      bool shaOk = strncasecmp(hex, dlSha, 64) == 0;
+      if (got == total && shaOk && Update.end(true)) ok = true;
+      else Update.abort();
+    }
+  }
+  http.end();
+  dlState = ok ? 2 : 3;
+  vTaskDelete(nullptr);
+}
+
 void EspPlatform::weatherLoop(uint64_t now) {
-  if (!wBody) { wBody = (char*)ps_malloc(8192); if (!wBody) return; xTaskCreatePinnedToCore(weatherTask, "tb_weather", 8192, nullptr, 1, nullptr, 0); }
-  if (wState == 2) { app_->weatherResult(wBody, wLen, wCode, now); wState = 0; }
-  if (wState == 0 && app_->weatherWant(now, wUrl, sizeof wUrl)) wState = 1;
+  if (!wBody) {
+    wBody = (char*)ps_malloc(8192); wPost = (char*)ps_malloc(2048);
+    if (!wBody || !wPost) return;
+    xTaskCreatePinnedToCore(netTask, "tb_net", 8192, nullptr, 1, nullptr, 0);
+  }
+  if (wState == 2) {
+    if (wKind == NK_WEATHER) app_->weatherResult(wBody, wLen, wCode, now);
+    else if (wKind == NK_MANIFEST) app_->updateManifest(wBody, wLen, wCode, now);
+    else if (wKind == NK_TELEMETRY) app_->telemetryResult(wCode, now);
+    wKind = NK_NONE; wState = 0;
+  }
+  if (wState == 0) {
+    StrBuf tb(wPost, 2048);
+    if (app_->weatherWant(now, wUrl, sizeof wUrl)) { wKind = NK_WEATHER; wState = 1; }
+    else if (app_->updateWant(now, wUrl, sizeof wUrl)) { wKind = NK_MANIFEST; wState = 1; }
+    else if (app_->telemetryWant(now, wUrl, sizeof wUrl, tb)) { wKind = NK_TELEMETRY; wState = 1; }
+  }
+  // instalação autorizada pelo núcleo (agora ou na hora agendada)
+  uint32_t sz = 0;
+  if (dlState == 0 && !otaActive_ && app_->updateInstallWant(dlUrl, sizeof dlUrl, dlSha, sizeof dlSha, &sz)) {
+    dlSize = sz; dlPermille = 0; dlState = 1; otaActive_ = true;
+    app_->enterOta(now);
+    xTaskCreatePinnedToCore(downloadTask, "tb_ota", 8192, nullptr, 1, nullptr, 0);
+  }
+  if (dlState == 1) app_->otaProgress(dlPermille);
+  if (dlState == 2) { dlState = 0; app_->flush(now, true); requestReboot(); }
+  if (dlState == 3) { dlState = 0; otaActive_ = false; app_->otaFailed(now); }
+}
+
+const char* EspPlatform::serviceUrl(Service sv) {
+  return sv == Service::UpdateManifest ? TB_UPDATE_URL : TB_TELEMETRY_URL;
 }
 
 // ── laço ────────────────────────────────────────────────────────────────────

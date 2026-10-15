@@ -11,11 +11,10 @@ const char* screenName(Screen s) {
     "intro", "first_use", "face", "clock", "today", "launcher", "more_apps", "quick", "pomodoro", "timers", "timer_set", "stopwatch",
     "alarms", "alarm_edit", "games", "game", "expressions", "breath", "level", "dice", "weather", "stats",
     "appearance", "color", "overlays", "volume", "brightness", "wifi", "system", "config", "info", "torch",
-    "confirm", "recovery", "resume", "screen_off", "ota"};
+    "confirm", "recovery", "resume", "screen_off", "ota", "legends", "language", "update", "update_offer"};
   return (int)s < (int)Screen::Count ? N[(int)s] : "?";
 }
 
-static const uint16_t INTRO_FULL_MS = 2800, INTRO_SHORT_MS = 900;
 
 // ── inicialização e persistência ────────────────────────────────────────────
 void App::loadAll(ms_t now) {
@@ -85,6 +84,7 @@ void App::applyPrefs(ms_t now) {
   plat_.setTimezone(TZ_TABLE[set_.tzIndex].posix);
   if (!set_.micReactions) { sound_.reset(); face_.setDance(false, 0); }
   if (fac_.model != Model::Pro) set_.showBattery = 0;
+  applyLanguage();
   applyTheme();
   updateBrightness(now);
 }
@@ -112,6 +112,10 @@ void App::begin(const HwCaps& caps, ms_t now, uint32_t seed, bool devBuild) {
   screen_ = Screen::Intro;
   setInputModeFor(screen_);
   canvas_.invalidateAll();
+  if (set_.updVersion[0] && versionCompare(TB_VERSION, set_.updVersion) >= 0) {   // a atualização pendente foi instalada
+    set_.updVersion[0] = 0; set_.updDueMin = 0; set_.updSnoozes = 0; set_.updAuto = 0; setDirty_ = true;
+    toast(tr("Atualizado!"), now + 3000, 3000);
+  }
   out_.play(Pattern::Boot, now);  // já obedece silencioso/volume salvos
   event(recovered_ ? "boot (dados restaurados ao padrão)" : "boot");
   forceFrame_ = true;
@@ -131,6 +135,7 @@ void App::toast(const char* msg, ms_t now, uint16_t ms) {
 }
 
 void App::noteInteraction(ms_t now) {
+  if (!lastActAt_ || now - lastActAt_ > 1500) { lastActAt_ = now; noteActivity(now); }
   lastInteraction_ = now;
   energy_ = tbMin(100, energy_ + 5);
   nextIdleExpr_ = now + 60000;
@@ -138,7 +143,7 @@ void App::noteInteraction(ms_t now) {
 
 bool App::listScreen(Screen s) const {
   return s == Screen::GamesMenu || s == Screen::TimerSet || s == Screen::Appearance || s == Screen::Overlays ||
-         s == Screen::System || s == Screen::Wifi;
+         s == Screen::System || s == Screen::Wifi || s == Screen::Legends || s == Screen::Language;
 }
 
 void App::setInputModeFor(Screen s) {
@@ -155,8 +160,8 @@ void App::gotoScreen(Screen s, ms_t now) {
   pressedHit_ = -1; pressedItem_ = -1; quickDrag_ = -1; quickArm_ = -1;
   if (homeScreen(s)) homePage_ = s;
   setInputModeFor(s);
-  if (s == Screen::Face) { face_.setExpression(baseExpr_, now); exprUntil_ = 0; }
-  if (s != Screen::Face) dockUntil_ = 0;
+  if (s == Screen::Face || s == Screen::Clock) { face_.setExpression(baseExpr_, now); exprUntil_ = 0; nextClockAct_ = now + 2500; }
+  if (s != Screen::Face) { dockUntil_ = 0; abortScene(now); }
   if (listScreen(s) || gridScreen(s)) buildList(now);
   if (s == Screen::Expressions && prev != Screen::Expressions) exprSel_ = 0;
   canvas_.invalidateAll();
@@ -175,6 +180,9 @@ void App::goBack(ms_t now) {
     case Screen::Torch: gotoScreen(returnScreen_ == Screen::Torch ? homePage_ : returnScreen_, now); break;
     case Screen::ColorPick: case Screen::Overlays: gotoScreen(Screen::Appearance, now); break;
     case Screen::Info: gotoScreen(returnScreen_ == Screen::System ? Screen::System : Screen::MoreApps, now); break;
+    case Screen::Legends: gotoScreen(Screen::MoreApps, now); break;
+    case Screen::Language: case Screen::Update: gotoScreen(Screen::System, now); break;
+    case Screen::UpdateOffer: return;   // precisa escolher: agora, mais tarde ou esta noite
     case Screen::Stopwatch: case Screen::Alarms: case Screen::Weather: case Screen::Breath: case Screen::Dice:
     case Screen::Expressions: case Screen::Stats: case Screen::Level:
       gotoScreen(Screen::MoreApps, now); break;
@@ -199,7 +207,7 @@ void App::unlock(UnlockId id, ms_t now) {
   if ((Pr.unlocked >> id) & 1u) return;
   Pr.unlocked |= 1u << id;
   markProgress(now);
-  char b[40]; StrBuf s(b, sizeof b); s.put("Nova: ").put(exprName(exprForUnlock(id))).put("!");
+  char b[40]; StrBuf s(b, sizeof b); s.put(tr("Nova: ")).put(tr(exprName(exprForUnlock(id)))).put("!");
   toast(b, now, 2600);
   out_.play(Pattern::Unlock, now);
   event(b);
@@ -374,6 +382,7 @@ void App::updateTimeServices(ms_t now) {
       Progress& Pr = P();
       Pr.pomodorosDone++;
       Pr.mood = (int16_t)tbMin(100, Pr.mood + 4);
+      Pr.bond = (uint16_t)tbMin(1000, Pr.bond + 4);
       markProgress(now);
       unlock(UNL_FOCADO, now);
       pushAlert(AlertType::PomoFocusDone, 0, now);
@@ -461,15 +470,34 @@ void App::rtcTime(int64_t epoch, ms_t now) {
 }
 
 // ── personalidade ───────────────────────────────────────────────────────────
+// Hora de dormir: a cada dia o Tuba sorteia quando começa a ficar sonolento
+// (entre 20:00 e 22:30) e quando acorda (entre 6:00 e 7:00). minsToBed recebe
+// quantos minutos faltam para a hora de dormir (negativo = já passou / dormindo).
+bool App::bedtimeNow(ms_t now, int* minsToBed) {
+  if (minsToBed) *minsToBed = 9999;
+  if (!clock_.valid()) return false;
+  int64_t ep = clock_.epoch(now) + (int64_t)TZ_TABLE[set_.tzIndex].offsetMin * 60;
+  int64_t day = ep / 86400;
+  int m = (int)((ep / 60) % 1440);
+  if (day != sleepDay_) {
+    sleepDay_ = day;
+    Rng r((uint32_t)(day * 2654435761u) ^ 0x7B1Du ^ (uint32_t)rng_.next());
+    bedMin_ = 20 * 60 + r.range(0, 150);
+    wakeMin_ = 6 * 60 + r.range(0, 60);
+  }
+  bool asleep = m >= bedMin_ || m < wakeMin_;
+  if (minsToBed) *minsToBed = asleep ? -1 : bedMin_ - m;
+  return asleep;
+}
+
 Expr App::idleExpression(ms_t now) {
   const Progress& Pr = P();
   if (pomo_.state() == RunState::Running) return pomo_.phase() == PomoPhase::Focus ? Expr::Focus : Expr::Rest;
   if (power_.known && power_.battery && power_.percent >= 0 && power_.percent <= 10 && !power_.charging) return Expr::Tired;
   if (energy_ < 25) return Expr::Sleepy;
-  if (clock_.valid()) {
-    int h = clock_.local(now, TZ_TABLE[set_.tzIndex].offsetMin).hour;
-    if (h >= 23 || h < 6) return Expr::Sleepy;
-  }
+  int toBed = 9999;
+  if (bedtimeNow(now, &toBed)) return Expr::Sleepy;
+  if (toBed <= 45 && rng_.range(0, 99) < 35) return Expr::Tired;   // perto da hora de dormir: cansadinho
   if (Pr.mood < -20) return Expr::Neutral;
   Expr fav = (Expr)set_.favoriteExpr;
   int r = rng_.range(0, 99);
@@ -505,9 +533,25 @@ void App::updatePersonality(ms_t now) {
     danceSince_ = 0;
     if (exprUntil_) exprUntil_ = now;
   }
-  if (screen_ != Screen::Face && screen_ != Screen::ColorPick) return;
-  // olhar: dedo > inclinação > ocioso
-  if (input_.pressed() && !input_.stuck()) {
+  bool clockFace = screen_ == Screen::Clock && set_.watchFace == 2;
+  if (screen_ != Screen::Face && screen_ != Screen::ColorPick && !clockFace) return;
+  if (screen_ == Screen::Face) maybeLegend(now);
+  if (clockFace) {
+    // relógio "Tuba" sem ninguém tocando: olha em volta, confere a hora, pisca e sorri
+    if (now >= nextClockAct_ && !exprUntil_) {
+      int r = rng_.range(0, 99);
+      if (baseExpr_ == Expr::Sleepy || baseExpr_ == Expr::Focus) r = 30 + r % 12;   // com sono/foco: só olhadinhas
+      nextClockAct_ = now + (ms_t)rng_.range(4500, 10000);
+      if (r < 30) { lookX_ = 950; lookY_ = 250; lookUntil_ = now + 1800; }          // olha para os números
+      else if (r < 42) { lookX_ = rng_.range(-900, 300); lookY_ = rng_.range(-700, 600); lookUntil_ = now + 1200; }
+      else if (r < 54) react(rng_.range(0, 1) ? Expr::WinkL : Expr::WinkR, now, 700);
+      else if (r < 64) react(Expr::Curious, now, 1600);
+      else if (r < 72) react(baseExpr_ == Expr::Happy ? Expr::Hit : Expr::Happy, now, 1800);
+      else if (r < 78) react(Expr::Surprised, now, 600);
+    }
+    face_.setPetting(false);
+    face_.setLookTarget(lookUntil_ > now, lookX_, lookY_);
+  } else if (input_.pressed() && !input_.stuck()) {
     face_.setLookTarget(true, (input_.x() - SCR_CX) * 1000 / 100, (input_.y() - (int)FACE_CY) * 1000 / 100);
   } else if (lookUntil_ > now) {
     face_.setLookTarget(true, lookX_, lookY_);
@@ -519,8 +563,8 @@ void App::updatePersonality(ms_t now) {
   } else {
     face_.setLookTarget(false, 0, 0);
   }
-  face_.setPetting(input_.petting() || (input_.pressed() && !input_.moved() && input_.holdMs(now) >= 600 && input_.holdMs(now) < 2000));
-  if (input_.pressed() && !input_.moved() && input_.holdMs(now) >= 2000 && input_.holdMs(now) < 8000) {
+  if (!clockFace) face_.setPetting(input_.petting() || (input_.pressed() && !input_.moved() && input_.holdMs(now) >= 600 && input_.holdMs(now) < 2000));
+  if (!clockFace && input_.pressed() && !input_.moved() && input_.holdMs(now) >= 2000 && input_.holdMs(now) < 8000) {
     face_.setExpression(Expr::Love, now); exprUntil_ = now + 400;
   }
   if (exprUntil_ && now >= exprUntil_) { exprUntil_ = 0; face_.setExpression(baseExpr_, now); }
@@ -571,6 +615,7 @@ void App::onGameOutcome(const GameOutcome& o, ms_t now) {
   bool rec = false;
   Pr.gamesPlayed++;
   Pr.mood = (int16_t)tbMin(100, Pr.mood + 2);
+  if (Pr.gamesPlayed % 3 == 0) Pr.bond = (uint16_t)tbMin(1000, Pr.bond + 1);
   switch (gameId_) {
     case GameId::Jump:
       if (o.score > Pr.jumpBest) { Pr.jumpBest = (uint16_t)o.score; rec = true; }
@@ -658,21 +703,38 @@ void App::buildList(ms_t now, bool keepScroll) {
       add("Sorteio", nullptr, Icon::Dice, ui::C_DICE, L_DICE);
       add("Expressões", nullptr, Icon::Sparkle, ui::C_EXPR, L_EXPR);
       add("Meu Tuba", nullptr, Icon::Heart, ui::C_STATS, L_STATS);
-      if (caps_.imu) add("Nível", nullptr, Icon::Level, ui::C_LEVEL, L_LEVEL);
-      else add("Sobre", nullptr, Icon::Info, ui::C_INFO, L_INFO);
+      add("Lendárias", nullptr, Icon::Medal, 0xFFD54A, L_LEGENDS);
+      break;
+    case Screen::Legends: {
+      const Progress& Pr = P();
+      int locked = 0;
+      for (int i = 0; i < SCENE_COUNT; i++) {
+        const SceneInfo& si = sceneInfo((SceneId)i);
+        if ((Pr.legendMask >> i) & 1u) add(tr(si.name), tr(si.hint), Icon::Medal, 0xFFD54A, L_LEGEND0 + i, RowKind::Action);
+        else locked++;
+      }
+      if (locked) {
+        StrBuf l(b, sizeof b); l.num(locked).put(' ').put(locked == 1 ? tr("secreta por descobrir") : tr("secretas por descobrir"));
+        add(b, tr("aparecem sozinhas, de vez em quando"), Icon::Lock, ui::C_SET, L_LEGEND_LOCKED, RowKind::Link);
+      }
+      break;
+    }
+    case Screen::Language:
+      for (int i = 0; i < (int)Lang::Count; i++)
+        add(langName((Lang)i), i == set_.language ? tr("em uso") : nullptr, Icon::Globe, i == set_.language ? ui::ACCENT : ui::C_SET, L_LANG0 + i, RowKind::Action);
       break;
     case Screen::GamesMenu: {
       const Progress& Pr = P();
       static const Icon GI[5] = {Icon::Shark, Icon::Bolt, Icon::Fish, Icon::Stopwatch, Icon::Level};
       static const Color GC[5] = {0x5CC8FF, 0xFFD54A, 0xFF9F43, 0x4BF0A6, 0x3EE6D0};
       for (int g = 0; g < (int)GameId::Count; g++) {
-        StrBuf s(b, sizeof b); s.put("Recorde: ");
+        StrBuf s(b, sizeof b); s.put(tr("Recorde: "));
         switch ((GameId)g) {
           case GameId::Jump: s.num(Pr.jumpBest); break;
-          case GameId::Reflex: if (Pr.reflexBestMs) s.num(Pr.reflexBestMs).put(" ms"); else s.put("--"); break;
-          case GameId::Fish: s.num(Pr.fishBest).put(" peixes"); break;
+          case GameId::Reflex: if (Pr.reflexBestMs) s.num(Pr.reflexBestMs).put(tr(" ms")); else s.put("--"); break;
+          case GameId::Fish: s.num(Pr.fishBest).put(tr(" peixes")); break;
           case GameId::Timing: if (Pr.timingBestPct100) s.fixed2(Pr.timingBestPct100).put('%'); else s.put("--"); break;
-          default: s.num(Pr.diveBest).put(" peixes"); break;
+          default: s.num(Pr.diveBest).put(tr(" peixes")); break;
         }
         add(gameTitle((GameId)g), b, GI[g], GC[g], L_GAME0 + g, RowKind::Action);
       }
@@ -688,7 +750,7 @@ void App::buildList(ms_t now, bool keepScroll) {
       add("Tema", set_.theme ? "Claro" : "Escuro", set_.theme ? Icon::Sun : Icon::Moon, ui::C_LOOK, S_THEME, RowKind::Value);
       add("Cor das expressões", EXPR_COLORS[set_.eyeColor].name, Icon::Palette, exprColorRgb(set_.eyeColor, false), S_EYE, RowKind::Link);
       int n = set_.showClock + set_.showWeather + (caps_.battery ? set_.showBattery : 0);
-      StrBuf o(b, sizeof b); if (!n) o.put("rosto limpo"); else o.num(n).put(n == 1 ? " item" : " itens");
+      StrBuf o(b, sizeof b); if (!n) o.put(tr("rosto limpo")); else o.num(n).put(n == 1 ? " item" : " itens");
       add("Informações na tela", b, Icon::Info, ui::C_INFO, S_OVERLAYS, RowKind::Link);
       add("Brilho dos olhos", nullptr, Icon::Sparkle, ui::C_EXPR, S_GLOW, RowKind::Toggle, set_.eyeGlow);
       static const char* const WF[] = {"Digital", "Analógico", "Tuba"};
@@ -713,13 +775,20 @@ void App::buildList(ms_t now, bool keepScroll) {
       add("Personalidade", set_.personality ? "Brincalhão" : "Tranquilo", Icon::Heart, ui::C_STATS, S_PERS, RowKind::Value);
       static const char* const AN[] = {"Calma", "Normal", "Animada"};
       add("Animação", AN[set_.animLevel], Icon::Sparkle, ui::C_EXPR, S_ANIM, RowKind::Value);
-      StrBuf o(b, sizeof b); if (!set_.screenOffS) o.put("nunca"); else formatDuration(o, (ms_t)set_.screenOffS * 1000, false);
+      StrBuf o(b, sizeof b); if (!set_.screenOffS) o.put(tr("nunca")); else formatDuration(o, (ms_t)set_.screenOffS * 1000, false);
       add("Apagar a tela", b, Icon::Moon, ui::C_SET, S_SCREENOFF, RowKind::Value);
       add("Formato 24 h", nullptr, Icon::Clock, ui::C_CLOCK, S_24H, RowKind::Toggle, set_.clock24h);
       add("Silencioso", nullptr, Icon::Silent, ui::C_VOL, S_SILENT, RowKind::Toggle, set_.silent);
       if (caps_.mic) add("Reagir a sons", nullptr, Icon::Note, ui::C_GAMES, S_MIC, RowKind::Toggle, set_.micReactions);
       if (caps_.imu) add("Reagir a movimento", nullptr, Icon::Level, ui::C_LEVEL, S_IMU, RowKind::Toggle, set_.imuReactions);
       add("Girar 180°", nullptr, Icon::Reset, ui::C_SET, S_ROTATE, RowKind::Toggle, set_.rotate180);
+      add("Idioma", langName((Lang)set_.language), Icon::Globe, ui::C_WIFI, S_LANG, RowKind::Link);
+      {
+        StrBuf u(b, sizeof b);
+        if (set_.updVersion[0]) u.put(tr("nova versão")).put(' ').put(set_.updVersion); else u.put("v").put(TB_VERSION);
+        add("Atualizações", b, Icon::Download, ui::C_SW, S_UPDATES, RowKind::Link);
+      }
+      add("Estatísticas anônimas", nullptr, Icon::Stats, ui::C_INFO, S_TELEMETRY, RowKind::Toggle, !set_.noTelemetry);
       add("Informações", TB_VERSION, Icon::Info, ui::C_INFO, S_INFO, RowKind::Link);
       add("Restaurar padrão de fábrica", nullptr, Icon::Reset, ui::BAD, S_FACTORY_RESET, RowKind::Action);
       break;
@@ -764,6 +833,9 @@ void App::cycleSetting(int id, ms_t now) {
     case S_WIFI_FORGET: confirm(C_WIFI_FORGET, now); return;
     case S_FACTORY_RESET: confirm(C_FACTORY_RESET, now); return;
     case S_INFO: infoPage_ = 0; returnScreen_ = Screen::System; gotoScreen(Screen::Info, now); return;
+    case S_LANG: gotoScreen(Screen::Language, now); return;
+    case S_UPDATES: gotoScreen(Screen::Update, now); return;
+    case S_TELEMETRY: set_.noTelemetry = !set_.noTelemetry; break;
     default: return;
   }
   sanitizeSettings(set_);
@@ -793,6 +865,15 @@ void App::onListPick(int id, ms_t now) {
     return;
   }
   if (id >= S_BRIGHT && id < S_LAST) { cycleSetting(id, now); return; }
+  if (id >= L_LEGEND0 && id < L_LEGEND0 + SCENE_COUNT) { playLegend((SceneId)(id - L_LEGEND0), now, false, Screen::Legends); return; }
+  if (id >= L_LANG0 && id < L_LANG0 + (int)Lang::Count) {
+    set_.language = (uint8_t)(id - L_LANG0);
+    applyPrefs(now); markSettings(now);
+    buildList(now, true);
+    toast(langName((Lang)set_.language), now);
+    event("idioma");
+    return;
+  }
   switch (id) {
     case L_CLOCK: goHome(now, Screen::Clock); break;
     case L_POMO: gotoScreen(Screen::Pomodoro, now); break;
@@ -813,6 +894,8 @@ void App::onListPick(int id, ms_t now) {
     case L_BRIGHT: gotoScreen(Screen::Brightness, now); break;
     case L_WIFI: gotoScreen(Screen::Wifi, now); break;
     case L_MORE: gotoScreen(Screen::MoreApps, now); break;
+    case L_LEGENDS: gotoScreen(Screen::Legends, now); break;
+    case L_LEGEND_LOCKED: toast(tr("Continue cuidando do Tuba..."), now, 2500); break;
   }
 }
 
@@ -833,7 +916,22 @@ static int galleryCount() { return (int)Expr::Dizzy; }  // expressões selecion�
 void App::onButton(int id, ms_t now) {
   if (id == B_BACK) { out_.play(Pattern::Menu, now); goBack(now); return; }
   forceFrame_ = true;
+  if (id == B_MEDAL) { medalAt_ = 0; out_.play(Pattern::Tap, now); transDir_ = -1; gotoScreen(Screen::Legends, now); return; }
   switch (screen_) {
+    case Screen::UpdateOffer:
+      if (id == B_UPD_NOW || id == B_UPD_LATER || id == B_UPD_NIGHT) {
+        out_.play(Pattern::Tap, now);
+        scheduleUpdate(id == B_UPD_NOW ? 0 : id == B_UPD_LATER ? 1 : 2, now);
+      }
+      break;
+    case Screen::Update:
+      out_.play(Pattern::Tap, now);
+      if (id == B_UPD_CHECK) checkUpdatesNow(now);
+      else if (id == B_UPD_NOW && set_.updVersion[0]) {
+        set_.updAuto = 1; set_.updDueMin = 0; updDueMs_ = 0; markSettings(now);
+        if (!staUp_) toast(tr("Sem internet: instala ao conectar"), now, 3000);
+      } else if (id == B_UPD_NIGHT && set_.updVersion[0]) { returnScreen_ = Screen::Update; scheduleUpdate(2, now); }
+      break;
     case Screen::Face:
       dockUntil_ = 0;
       out_.play(Pattern::Tap, now);
@@ -948,6 +1046,7 @@ void App::onButton(int id, ms_t now) {
       break;
     case Screen::Info:
       if (id == B_PAGE_NEXT) { infoPage_ = (infoPage_ + 1) % 6; transDir_ = -1; screenAt_ = now; }
+      else if (id == B_INFO_UPDATE) { out_.play(Pattern::Tap, now); gotoScreen(Screen::Update, now); checkUpdatesNow(now); }
       break;
     case Screen::Config: case Screen::FirstUse:
       if (id == B_PAGE_NEXT) { configPage_ = (configPage_ + 1) % 3; transDir_ = -1; screenAt_ = now; }
@@ -1097,6 +1196,12 @@ void App::handleTouch(const TouchEvent& e, ms_t now) {
     return;
   }
   if (alertN_ && input_.mode() != TouchMode::Game) { onAlertTouch(e, now); return; }
+  // reação lendária em andamento: um toque encerra com delicadeza (não dispara outra coisa)
+  if (scene_.active() && screen_ == Screen::Face &&
+      (e.type == TouchEv::Tap || e.type == TouchEv::DoubleTap || e.type == TouchEv::LongRelease || e.type == TouchEv::Pet)) {
+    endScene(now);
+    return;
+  }
   if (input_.mode() == TouchMode::Game) {
     if (!game_) return;
     if (e.type == TouchEv::Down || e.type == TouchEv::Move) game_->setControl(motion_.tiltX(), e.x);
@@ -1226,10 +1331,21 @@ void App::handleMotion(MotionEv e, ms_t now) {
 }
 
 void App::handleSound(SoundEv e, ms_t now) {
-  if (!set_.micReactions || screen_ != Screen::Face) return;
+  if (!set_.micReactions || screen_ != Screen::Face || scene_.active()) return;
   switch (e) {
     case SoundEv::Clap: react(Expr::Startled, now, 900, Pattern::Startled); event("palma"); break;
-    case SoundEv::Loud: react(Expr::Squint, now, 2500); event("barulho alto"); break;
+    case SoundEv::Loud: {
+      // às vezes (com afinidade e no máximo uma lendária por dia) ele tampa os ouvidos
+      Progress& Pr = P();
+      int64_t day = localDay(now);
+      if (!scene_.active() && Pr.legendDay != (uint16_t)(day + 1) && rng_.range(0, 99) < 35 &&
+          chooseLegend(now, true) == SceneId::Ouvidos) {
+        Pr.legendDay = (uint16_t)(day + 1); markProgress(now);
+        playLegend(SceneId::Ouvidos, now, true);
+      } else react(Expr::Squint, now, 2500);
+      event("barulho alto");
+      break;
+    }
     case SoundEv::MusicStart: event("música: dançando"); break;
     case SoundEv::MusicStop: event("música parou"); break;
     default: break;
@@ -1269,7 +1385,7 @@ void App::hwButton(HwButton b, bool longPress, ms_t now) {
 uint32_t App::frameIntervalMs(ms_t now) const {
   if (screen_ == Screen::ScreenOff) return 250;
   if (screen_ == Screen::Torch) return 1000;
-  if (screen_ == Screen::Intro || screen_ == Screen::Face || screen_ == Screen::ColorPick) return 33;
+  if (screen_ == Screen::Intro || screen_ == Screen::Face || screen_ == Screen::ColorPick || medalVisible(now)) return 33;
   if (screen_ == Screen::Game && game_ && (game_->needsFastFrames() || game_->phase() == GamePhase::Playing)) return 33;
   if (alertN_) return 50;
   if (input_.pressed() || list_.moving() || now - screenAt_ < 400 || toastUntil_ > now) return 33;
@@ -1299,6 +1415,16 @@ bool App::tick(ms_t now) {
   if (screen_ == Screen::RecoveryConfirm && now >= recoveryUntil_) gotoScreen(returnScreen_ == Screen::RecoveryConfirm ? homePage_ : returnScreen_, now);
 
   updateTimeServices(now);
+  updateNet(now);
+  if (scene_.active()) {
+    if (screen_ != Screen::Face || alertN_) abortScene(now);
+    else {
+      Pattern sp = scene_.takeSound(now);
+      if (sp != Pattern::None) out_.play(sp, now, rng_.next());
+      if (scene_.finished(now)) endScene(now);
+    }
+  }
+  if (medalAt_ && now - medalAt_ >= kMedalMs + 100) { medalAt_ = 0; forceFrame_ = true; }
 
   if (screen_ == Screen::Intro && now - bootAt_ >= (set_.shortIntro ? INTRO_SHORT_MS : INTRO_FULL_MS)) {
     if (!set_.setupDone) { plat_.apOpen(); configPage_ = 0; gotoScreen(Screen::FirstUse, now); }
@@ -1325,7 +1451,7 @@ bool App::tick(ms_t now) {
     ms_t el = now - breathStart_;
     if (el >= (ms_t)cyc * CYC[breathMode_]) {
       breathOn_ = false;
-      Progress& Pr = P(); Pr.breathSessions++; markProgress(now);
+      Progress& Pr = P(); Pr.breathSessions++; Pr.bond = (uint16_t)tbMin(1000, Pr.bond + 3); markProgress(now);
       toast("Sessão concluída", now, 2500);
       out_.play(Pattern::Unlock, now);
       if (Pr.breathSessions >= 3) unlock(UNL_ZEN, now);
@@ -1349,7 +1475,7 @@ bool App::tick(ms_t now) {
   // descanso do visor (timers continuam)
   bool canSleep = screen_ != Screen::Intro && screen_ != Screen::Game && screen_ != Screen::Ota && screen_ != Screen::ScreenOff &&
                   screen_ != Screen::FirstUse && screen_ != Screen::Confirm && screen_ != Screen::RecoveryConfirm && screen_ != Screen::Resume &&
-                  screen_ != Screen::Torch && !(screen_ == Screen::Breath && breathOn_) && !(screen_ == Screen::Stopwatch && sw_.state() == RunState::Running);
+                  screen_ != Screen::Torch && screen_ != Screen::UpdateOffer && !scene_.active() && !(screen_ == Screen::Breath && breathOn_) && !(screen_ == Screen::Stopwatch && sw_.state() == RunState::Running);
   if (set_.screenOffS && canSleep && !alertN_ && !input_.pressed() && now - lastInteraction_ >= (ms_t)set_.screenOffS * 1000) sleepScreen(now);
   // sem interação, tudo volta ao rosto em tela cheia (timers/Pomodoro seguem rodando)
   ms_t idleLimit = 0;
@@ -1358,6 +1484,8 @@ bool App::tick(ms_t now) {
     case Screen::Torch: case Screen::Resume: case Screen::RecoveryConfirm:
       break;
     case Screen::Config: idleLimit = 180000; break;   // tempo para ler o QR e configurar
+    case Screen::UpdateOffer: idleLimit = 0; break;
+    case Screen::Legends: case Screen::Language: case Screen::Update: idleLimit = 30000; break;
     case Screen::Breath: idleLimit = breathOn_ ? 0 : 30000; break;
     case Screen::Stopwatch: idleLimit = sw_.state() == RunState::Running ? 0 : 45000; break;
     case Screen::Launcher: case Screen::MoreApps: case Screen::Quick: case Screen::GamesMenu: case Screen::Appearance:
@@ -1366,6 +1494,9 @@ bool App::tick(ms_t now) {
       idleLimit = 20000; break;
     default: idleLimit = 45000; break;  // apps (Pomodoro, Timer, relógio...)
   }
+  // aviso de atualização sem resposta: nunca é ignorado — vira "mais tarde" (ou "esta noite")
+  if (screen_ == Screen::UpdateOffer && !alertN_ && !input_.pressed() && now - lastInteraction_ >= 60000)
+    scheduleUpdate(set_.updSnoozes < 3 ? 1 : 2, now);
   if (idleLimit && !alertN_ && !input_.pressed() && now - lastInteraction_ >= idleLimit) {
     if (screen_ == Screen::Confirm) confirmAction_ = C_NONE;
     transDir_ = 0;
@@ -1442,6 +1573,14 @@ void App::enterOta(ms_t now) {
   event("atualização iniciada");
 }
 
-void App::otaFailed(ms_t now) { toast("Falha na atualização", now, 4000); event("atualização falhou"); goHome(now); }
+void App::otaFailed(ms_t now) {
+  toast(tr("Falha na atualização"), now, 4000);
+  event("atualização falhou");
+  if (set_.updVersion[0]) {   // tenta de novo mais tarde (continua obrigatória)
+    if (clock_.valid()) set_.updDueMin = (uint32_t)(clock_.epoch(now) / 60) + 60; else updDueMs_ = now + 3600000ull;
+    markSettings(now);
+  }
+  goHome(now);
+}
 
 }  // namespace tb

@@ -2,6 +2,7 @@
 // Formato: {tempo_ms, tipo, a, b, c}
 //   tipo -1: checkpoint (imprime CRC da imagem) · 1/0: toque (x=a, y=b) pressionado/solto
 //   2: movimento (a, b, c em mg) · 3: nível sonoro (a)
+//   4: reação lendária (descoberta) de índice a · 5: idioma a (0 pt, 1 en, 2 es) · 6: abre a coleção Lendárias
 // A unidade é um TubaBot Pro vermelho, tema escuro (perfil de fábrica nos dois lados).
 #pragma once
 static const long long SCENARIO[][5] = {
@@ -17,4 +18,7 @@ static const long long SCENARIO[][5] = {
   {10100,1,160,30,0}, {10130,1,160,90,0}, {10160,1,160,150,0}, {10190,1,160,210,0}, {10200,0,160,210,0}, {10800,-1,0,0,0}, // painel rápido
   {10900,1,100,80,0}, {10980,0,100,80,0}, {11600,-1,0,0,0},         // tema claro
   {11700,3,30,0,0}, {11740,3,80,0,0}, {11780,3,32,0,0}, {12400,-1,0,0,0},
+  {12500,4,4,0,0}, {13900,-1,0,0,0}, {15500,-1,0,0,0},                 // cafezinho (lendária)
+  {16000,4,6,0,0}, {20200,-1,0,0,0}, {26000,-1,0,0,0},                 // escada rolante + medalha
+  {26100,5,2,0,0}, {26200,6,0,0,0}, {27000,-1,0,0,0},                  // espanhol + coleção
 };
