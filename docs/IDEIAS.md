@@ -11,7 +11,9 @@ Nada disto está implementado. Ordem aproximada de valor ÷ esforço.
 | **Integração com Home Assistant** | MQTT ou a API local que já existe | Expressões por automação ("porta aberta", "lavadora pronta"). |
 | **Rotina de pausas ativas** | só software | Lembrete para levantar/beber água ligado ao Pomodoro. |
 | **Bichinho com fome/sono** | só software | Necessidades leves que o carinho e os jogos atendem. |
-| **Temas de cor do sistema** | só software | Além da cor dos olhos, cores da interface. |
 | **Mais mostradores** | só software | Relógio de palavras, fases da lua, contagem regressiva para uma data. |
-| **Cartão microSD** | a placa tem slot TF (conferir pinos no esquema) | Sons gravados, fotos e mostradores personalizados. |
+| **Cartão microSD** | a ES3C28P tem slot (SDIO) | Sons gravados, fotos e mostradores personalizados. |
+| **LED RGB da placa** | WS2812 no GPIO42 (já existe) | Luz suave na cor das expressões nos avisos, ou "respirando" no Pomodoro — visível através do corpo. |
+| **Sensor de movimento opcional** | módulo IMU (ex.: MPU6050/QMI8658) no conector I²C | Reativa sacudir, inclinar, pegar no colo e o app Nível — a lógica já está no núcleo e testada. |
+| **Tela de fábrica no portal** | só software | Gravar o perfil da unidade pelo navegador, protegido por senha de fábrica. |
 | **Multiplayer entre dois TubaBots** | ESP-NOW (sem roteador) | Mandar carinho/emoji de um para o outro na mesma casa. |

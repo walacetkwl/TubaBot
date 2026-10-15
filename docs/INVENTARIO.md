@@ -1,4 +1,4 @@
-# Inventário v2: referências consultadas, decisões e contradições
+# Inventário: referências consultadas, decisões e contradições
 
 ## Referências
 
@@ -40,3 +40,22 @@ Tudo o que a v1 fazia continua: expressões, carinho/amor, personalidades, desbl
 6. **Eixos do IMU e espelhamento do toque** foram deduzidos do esquema e dos exemplos, não medidos: ficam como macros em `board_profile.h` e a bancada confirma.
 7. **Arduino-ESP32 3.x**: as bibliotecas da placa exigem o core 3.x; a plataforma oficial do PlatformIO parou no 2.x, por isso o pioarduino com versão fixada.
 8. **Determinismo**: o mesmo núcleo gera framebuffers idênticos bit a bit no nativo e no WebAssembly (`-ffp-contract=off` nos dois).
+
+## v3 — ES3C28P em paisagem (out/2026)
+
+| Fonte | Uso |
+|---|---|
+| LCDWIKI — 2.8inch ESP32-S3 Display (ES3C28P/ES3N28P) | especificação, pinos, alimentação |
+| BSP `ngttai/esp32_s3_es3c28p` | pinos, orientação do ILI9341V (IPS, BGR), alto-falante 8 Ω 1,5 W, bateria/TP4054 |
+| `bmorcelli/Launcher` (perfil ES3C28P) | pinos I²S (saída 6, entrada 8), habilitação do amplificador ativa em baixo, mapa do toque por rotação |
+| Arduino_GFX `v1.6.4` (Arduino_ILI9341) | driver da tela e rotações |
+
+Decisões da v3:
+
+1. **Paisagem 320×240** em todo o sistema (pedido): o controlador gira 90°, o toque é convertido de retrato para paisagem no firmware (`TB_TOUCH_MAP`), e "Girar 180°" usa a rotação 3 do controlador.
+2. **Fábrica separada das preferências:** partição própria de 4 KB no fim da flash (fora do alcance da imagem completa), texto legível com CRC, lido pelo mesmo parser no firmware, simulador e testes; a ferramenta Python gera o mesmo texto byte a byte.
+3. **Um firmware só:** Lite/Pro é só uma linha do perfil; o núcleo desliga tudo de bateria quando `modelo=lite` (inclusive na API).
+4. **Unidade sem perfil** = Lite genérico (grafite, escuro) com aviso — mais seguro do que mostrar uma bateria inexistente.
+5. **Tema claro** sem halo nos olhos e com brilhos em tom da cor (o halo em fundo branco vira mancha); mistura de cores com arredondamento ao mais próximo para não gerar tons esverdeados em RGB565.
+6. **Sem IMU e sem RTC na placa:** a lógica de movimento continua no núcleo (testada, oculta por `caps.imu`); NTP passa a vir ligado por padrão.
+7. Dados de pinos divergentes (habilitação do amplificador: LCDWIKI "baixo liga" × BSP "alto liga") ficam como opção `TB_PA_ACTIVE_LOW` para a bancada.

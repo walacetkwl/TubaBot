@@ -1,45 +1,37 @@
-# Validação v2 — o que foi provado, como, e o que depende das peças
+# Validação v3 — o que foi provado, como, e o que depende da placa
 
-Data: 15/10/2026 · núcleo 2.0.0.
-
-## Legenda
-
-- **SIM** — implementado e testado (testes nativos e/ou simulador)
-- **COMP** — firmware compilado com a plataforma real (pioarduino 53.03.13 / Arduino-ESP32 3.1.3) para o ESP32-S3
-- **HW** — pendente de bancada (peças ainda não recebidas)
+Data: 15/10/2026 · núcleo 3.0.0 · placa-alvo ES3C28P (tela 320×240 em paisagem).
 
 ## Resultados reais desta entrega
 
 | Verificação | Comando | Resultado |
 |---|---|---|
-| Testes nativos do núcleo | `make test` | **55 testes, 27.137 verificações, 0 falhas** (também com AddressSanitizer + UBSan: 0 falhas) |
-| Mesmo núcleo no simulador | `make crosscheck` | 9 checkpoints com CRC do framebuffer 466×466 **idênticos** entre nativo e WebAssembly |
-| Simulador e portal no navegador | `make e2e` (Chromium headless) | **20/20** verificações (file:// e HTTP, rede própria e rede de casa com PIN), sem erros de JavaScript e sem recurso externo |
-| Firmware `tubabot` e `tubabot_vibra` | `pio run -e tubabot -e tubabot_vibra` | compilam; flash 1.624.484 B (38,7 % da partição de 4 MB), RAM estática 20,9 %; único aviso vem do Arduino_GFX (terceiro) |
-| Imagens prontas | `tools/make_dist.sh` | `firmware/dist/*-completo.bin` (gravar em 0x0) e `*-app-ota.bin` (portal), com `SHA256SUMS.txt` |
-| Portal | `make portal` | 48.127 → 15.538 bytes (gzip), sem CDN |
-| Galeria | `make screens` | 31 telas reais em `docs/telas.png` |
+| Testes nativos do núcleo | `make test` | **62 testes, 27.250 verificações, 0 falhas** (também com AddressSanitizer + UBSan: 0 falhas) |
+| Mesmo núcleo no simulador | `make crosscheck` | 12 checkpoints com CRC da tela 320×240 **idênticos** entre nativo e WebAssembly (inclui perfil de fábrica, controles do rosto, menu e troca de tema) |
+| Simulador e portal no navegador | `make e2e` (Chromium) | **26/26** verificações: paisagem 4:3, gestos, controles do rosto, perfil de fábrica Lite azul/tema claro, portal (tema, cor, informações na tela), portal por HTTP com e sem PIN; sem erros de JavaScript nem recursos externos |
+| Ferramenta de fábrica × firmware | teste `factory_profile_from_python_tool` | texto gerado pelo `tools/fabrica.py` lido e regravado pelo núcleo **byte a byte igual** |
+| Firmware ES3C28P | `pio run -e tubabot` | compila; flash 1.498.584 B (35,7 % da partição de 4 MB), RAM estática 21,3 %; único aviso vem do Arduino_GFX (terceiro) |
+| Imagens prontas | `tools/make_dist.sh`, `tools/fabrica.py --todos` | `firmware/dist/tubabot-v3.0.0-completo.bin` (0x0), `…-app-ota.bin` (portal), 8 perfis em `firmware/fabrica/` (0xFEF000) |
+| Galeria | `make screens` | 53 telas reais em `docs/telas.png` (escuro/claro, 4 cores físicas, Lite/Pro) |
 
 ## Matriz
 
 | Área | Estado | Observação |
 |---|---|---|
-| Rosto, 34 expressões, piscar, olhar, carinho, amor | SIM · COMP | |
-| Gestos na tela (toque, duplo, longo, deslizar ×4, carinho, recuperação) | SIM · COMP · **HW** | orientação do toque a confirmar |
-| Reações a movimento (chacoalhar, pegar, virar, inclinar) | SIM · COMP · **HW** | eixos do IMU a confirmar |
-| Reações a som (palmas, barulho, música/dança) | SIM · COMP · **HW** | ganho do ES7210 a confirmar |
-| Sons e volume | SIM · COMP · **HW** | ganho do ES8311 e alto-falante comprado |
-| Bateria, carregamento, aviso de bateria fraca | SIM · COMP · **HW** | |
-| RTC (hora sem Wi-Fi) | SIM · COMP · **HW** | |
-| 5 jogos, Pomodoro, 3 timers, cronômetro, lembretes, alarmes | SIM · COMP | |
-| Hoje, Clima (Open-Meteo), Respiração, Nível, Sorteio, mostradores | SIM · COMP | clima em rede real: **HW** |
-| Portal, PIN, backup (inclusive da v1), OTA | SIM · COMP · **HW** (OTA real) | |
-| Vibração (MV50 no GPIO16) | SIM · COMP · **HW** | só `tubabot_vibra` |
+| Rosto em tela cheia, controles que aparecem e somem, 34 expressões | testado + compilado | |
+| Tema claro/escuro, cor das expressões por tema | testado + compilado | |
+| Informações sobre o rosto (hora, clima, bateria só Pro) | testado + compilado | |
+| Perfil de fábrica, Lite/Pro, restaurar padrão de fábrica | testado + compilado | gravação da partição real: **bancada** |
+| Menu 3×3, Aparência, Cor, Volume, Brilho, Wi-Fi, Sistema, retorno automático ao rosto | testado + compilado | |
+| Jogos, Pomodoro, timers, cronômetro, alarmes, lembretes, clima | testado + compilado | clima em rede real: **bancada** |
+| Tela ILI9341V em paisagem | compilado | orientação/cores: **bancada** (`tela-teste`) |
+| Toque FT6336G | compilado | mapa retrato→paisagem: **bancada** (`toque`) |
+| Alto-falante e microfone (ES8311) | compilado | polaridade do amplificador e ganhos: **bancada** |
+| Bateria (ADC) | compilado | divisor e curva: **bancada** com multímetro |
+| Portal, PIN, backup, OTA | testado + compilado | OTA real: **bancada** |
 
 ## Limites honestos
 
-- Nenhum teste rodou na placa física: a tela, o toque e os codecs foram configurados conforme os exemplos oficiais da Waveshare, mas só a bancada confirma.
-- O consumo e a autonomia da bateria são estimativas.
-- O simulador reproduz a lógica e o desenho exatamente; a física dos sensores (ruído do IMU, acústica dos microfones) é aproximada.
-
-Roteiro de bancada: [`BANCADA.md`](BANCADA.md).
+- Nada rodou na placa física ainda. Pinos vieram de três fontes que concordam (LCDWIKI, BSP `ngttai`, Launcher); onde divergem (habilitação do amplificador) há uma opção de compilação.
+- A placa não informa se a bateria está carregando nem tem relógio com bateria: o TubaBot não mostra "carregando" e a hora vem da rede.
+- Autonomia da bateria e consumo são estimativas.
